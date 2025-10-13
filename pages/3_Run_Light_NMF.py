@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import zipfile
 from preview_heatmap import preview_wide_heatmap_inline
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 
 if "API_URL" not in st.session_state:
@@ -177,6 +179,7 @@ if st.session_state["gene_loadings"] is not None and st.session_state["module_us
         fig = preview_wide_heatmap_inline(df=df, meta=meta, annotation_cols=annotation_cols, step=5)
         st.pyplot(fig)
         
+        st.session_state["previous_heatmaps"][k] = fig
         png_bytes = fig_to_png(fig)
 
         st.download_button(

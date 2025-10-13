@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 import queue
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 # =========================
 # Safe initializations
@@ -156,28 +158,25 @@ if not zip_bytes:
 zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
 names = [n for n in zf.namelist() if not n.endswith("/")]
 
+st.markdown("---")
 st.subheader("NMF Results")
 for name in names:
     raw = zf.read(name)
     ext = Path(name).suffix.lower()
     short = Path(name).name
 
-    st.download_button(
-        f"Download {short}",
-        data=raw,
-        file_name=short,
-        mime=("application/pdf" if ext == ".pdf" else "application/octet-stream"),
-        key=f"dl_{name}",
-    )
-
     if ext == ".pdf":
-        b64 = base64.b64encode(raw).decode("utf-8")
-        st.markdown(
-            f'<iframe src="data:application/pdf;base64,{b64}" '
-            f'width="100%" height="900" type="application/pdf"></iframe>',
-            unsafe_allow_html=True,
+        st.write("Download full heatmap as a pdf with the link below")
+        st.download_button(
+            f"Download {short}",
+            data=raw,
+            file_name=short,
+            mime=("application/pdf" if ext == ".pdf" else "application/octet-stream"),
+            key=f"dl_{name}",
         )
-    elif ext in {".txt", ".tsv", ".csv"}:
+        continue
+    
+    if ext in {".txt", ".tsv", ".csv"}:
         df = read_table(raw, name)
         st.markdown(f"**{short}**")
         st.dataframe(df, use_container_width=True, height=500)
@@ -187,6 +186,14 @@ for name in names:
             st.code(raw[:2048].decode("utf-8", errors="replace"))
         except Exception:
             st.write("(Preview not supported)")
+    
+    st.download_button(
+            f"Download {short}",
+            data=raw,
+            file_name=short,
+            mime=("application/pdf" if ext == ".pdf" else "application/octet-stream"),
+            key=f"dl_{name}",
+        )
 
 # ---------------- Interactive Heatmap ----------------
 st.subheader("Interactive Heatmap")

@@ -3,6 +3,8 @@ import pandas as pd
 import requests
 import json
 import io
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 st.subheader("Get correlation statistic for each module")
 if "correlation_values" not in st.session_state:

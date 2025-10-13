@@ -2,6 +2,10 @@ import streamlit as st
 import requests
 from streamlit_autorefresh import st_autorefresh
 
+from ui_theme import apply_custom_theme
+apply_custom_theme()
+
+
 
 # --- Session state ---
 st.session_state.setdefault("preprocessed_feather", None)
@@ -71,3 +75,5 @@ Then explore different values of *k* and analyze the results.
 Finally run NMF algorithm with a chosen value of *k* and download the results.
 """
 )
+
+st.page_link("pages/1_Metadata_Upload.py", label="Continue")

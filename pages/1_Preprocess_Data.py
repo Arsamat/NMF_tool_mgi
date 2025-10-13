@@ -5,6 +5,8 @@ import io
 import threading
 import queue
 from streamlit_autorefresh import st_autorefresh
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 if "meta" not in st.session_state or st.session_state["meta"] is None:
     st.error("Upload metadata first on the previous page before proceeding here.")

@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 if "meta" not in st.session_state:
     st.session_state["meta"] = None

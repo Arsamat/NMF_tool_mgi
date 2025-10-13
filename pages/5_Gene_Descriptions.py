@@ -8,6 +8,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import io
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 if "API_URL" not in st.session_state:
     st.session_state["API_URL"] = "http://3.141.231.76:8000/"

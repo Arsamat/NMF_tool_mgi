@@ -3,9 +3,10 @@ import requests
 import pandas as pd
 from io import StringIO
 import matplotlib.pyplot as plt   # <-- make sure pyplot is imported here too
-from anova_plots import make_permanova_boxplot
 import io
 import json
+from ui_theme import apply_custom_theme
+apply_custom_theme()
 
 
 #if "API_URL" not in st.session_state:

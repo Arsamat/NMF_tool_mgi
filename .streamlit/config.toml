@@ -1,0 +1,10 @@
+[theme]
+base = "dark"
+primaryColor = "#799fd7ff"
+backgroundColor = "#FFF"
+secondaryBackgroundColor = "#799fd7ff"   # darker shade of olive
+textColor = "#000"
+font = "sans serif"
+
+[ui]
+layout = "wide"
