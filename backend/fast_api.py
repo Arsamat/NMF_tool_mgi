@@ -92,9 +92,13 @@ cloudwatch = boto3.client("cloudwatch", region_name="us-east-2")
 # Middleware to log every request into CloudWatch
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Skip internal health checks
+    if request.url.path in ("/healthz", "/"):
+        return await call_next(request)
+
     try:
         cloudwatch.put_metric_data(
-            Namespace="FastAPIApp",   # Custom namespace for your app
+            Namespace="FastAPIApp",
             MetricData=[
                 {
                     "MetricName": "RequestCount",
@@ -107,12 +111,10 @@ async def log_requests(request: Request, call_next):
             ]
         )
     except Exception as e:
-        # Don’t crash the app if CloudWatch call fails
         print(f"Failed to push metric: {e}")
 
-    # Continue with request handling
-    response = await call_next(request)
-    return response
+    return await call_next(request)
+
 
 
 
