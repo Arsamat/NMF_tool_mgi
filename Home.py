@@ -59,11 +59,13 @@ def check_health():
         st.session_state["fastapi_ready"] = False
 
 # 1) Kick off EC2 start the first time the user lands on the app
-start_ec2_once()
+if not st.session_state["ec2_start_triggered"]:
+    start_ec2_once()
+
 check_health()
 # 2) Poll readiness
 if not st.session_state["fastapi_ready"]:
-    st.info("Waking up the compute node… this usually takes 1–4 minutes.")
+    st.info("Waking up the compute node… this usually takes 1–4 minutes. Please, wait till it is ready to proceed.")
     st_autorefresh(interval=5000, key="preproc_refresh")
 else:
     st.success("Compute node is ready.")
