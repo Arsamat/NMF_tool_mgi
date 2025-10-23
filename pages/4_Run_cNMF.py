@@ -84,7 +84,13 @@ def run_nmf_job(api_url, preprocessed_bytes, meta_bytes, post_data, q):
 # Page UI
 # =========================
 st.markdown("---")
-st.subheader("Run NMF with selected parameters")
+st.subheader("Run consensus NMF with selected parameters")
+st.markdown('''
+    Run consensus NMF following the method of Kotliar et al. 
+    Gene spectra z-scores (gene contributions to each module) are expected to be very small, 
+    as they are unit normalized across scores for all genes included in the analysis.      
+
+''')
 
 # Validate required inputs
 if "preprocessed_feather" not in st.session_state or st.session_state["preprocessed_feather"] is None:
@@ -98,8 +104,11 @@ if meta is None:
 
 # Inputs
 k = st.number_input("k", 2, 50, 7)
-hvg = st.number_input("hvg", 100, 20000, 2000)
-max_iter = st.number_input("max_iter", 100, 20000, 5000)
+if st.session_state["integer_format"]:
+    hvg = st.number_input("Number of highly variable genes to include", 100, 20000, 2000)
+else:
+    hvg = 10000
+max_iter = st.number_input("Maximum number of iterations", 100, 20000, 5000)
 
 # Show meta preview & build bytes once (safe to pass into thread)
 st.write("**Metadata available:**")

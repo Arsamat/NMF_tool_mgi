@@ -11,7 +11,7 @@ apply_custom_theme()
 if "meta" not in st.session_state or st.session_state["meta"] is None:
     st.error("Upload metadata first on the previous page before proceeding here.")
 
-st.header("You can either upload data for pre-processing or upload already pre-processed data")
+
 if "preprocessed_feather" not in st.session_state:
     st.session_state["preprocessed_feather"] = None
 if "process_status" not in st.session_state:
@@ -20,6 +20,60 @@ if "result_queue" not in st.session_state:
     st.session_state["result_queue"] = queue.Queue()
 if "API_URL" not in st.session_state:
     st.session_state["API_URL"] = "http://52.14.223.10:8000/"
+if "integer_format" not in st.session_state:
+    st.session_state["integer_format"] = False
+
+#HELPERS
+def preview_upload():
+    if st.session_state["counts"] is not None:
+        content = st.session_state["counts"].getvalue()
+
+        # --- Auto-detect separator ---
+        detected_sep = None
+        for sep in [",", "\t", ";", " "]:
+            try:
+                df = pd.read_csv(io.BytesIO(content), sep=sep)
+                if len(df.columns) > 1:
+                    detected_sep = sep
+                    break
+            except Exception:
+                continue
+        if detected_sep is None:
+            st.error("❌ Could not detect file delimiter automatically.")
+            st.stop()
+
+        st.dataframe(df.head())
+        return df
+    
+    
+st.header("You can either upload data for pre-processing or upload already pre-processed data")
+if st.button('Learn More about pre-processing'):
+    st.markdown('''
+    Please upload your data with transcripts as rows and samples as columns. Transcripts should be identified by either **Ensembl ID** or **gene symbols**.
+
+    Raw counts will undergo the following preprocessing:
+
+    1) Lowly expressed genes will be removed with **edgeR::filterByExpr()**
+
+    2) TMM normalization of library sizes
+
+    3) Transformation to log(counts per million)
+
+    4) Optional batch correction with **limma::removeBatchEffect()**
+
+    **You must know which factors you can and should run batch correction on!**
+
+    5) Selection of the top X most variable genes (generally 2000 - 5000)
+
+    6) The resulting normalized, transformed expression values will be forced positive by a simple linear transformation to enable NMF.
+
+    The reason we apply this preprocessing (rather than, e.g., size factor normalization with DESeq2 which preserves integer counts) 
+    is because we have determined **limma::removeBatchEffect()** to be the best method for batch correction, and it requires log-transformed data. 
+    **If you submit your own pre-processed data, you are not required to follow this exact procedure.** However, removal of lowly expressed genes and some sort of normalization 
+    for library size (e.g. size factor normalization with DESeq2) is **highly encouraged**. 
+    The main restriction for NMF is that the data must be **non-negative**.
+                ''')
+    st.button("Close info")
 
 def start_thread(files, url, data, result_queue):
     CONNECT_TIMEOUT = 10          # seconds to establish TCP connection
@@ -92,10 +146,15 @@ def submit_preprocess():
 @st.dialog("Preprocess Data")
 def preprocess_window():
     st.session_state["counts"] = st.file_uploader("counts", type=["csv","tsv","txt"])
+    df = preview_upload()
+    
     st.session_state["hvg"] = st.number_input("Number of High Variable Genes", value=2000, key="hvg_preproc")
     #st.session_state["gene_column"] = st.text_input("Column name of the gene IDs in your count file", placeholder="Unnamed: 0")
-    st.session_state["design_factor"] = st.text_input("Design factor", placeholder="Group", key="design_factor_preproc")
-    st.session_state["gene_column"] = st.text_input("Enter the column name with gene names if no name enter Unknown: 0", placeholder="Unknown: 0") 
+    st.session_state["gene_column"] = st.selectbox(
+            "Select the column that contains gene names:",
+            options=df.columns.tolist() if df is not None else [],
+            index=0
+        ) 
     st.session_state["batch"] = st.checkbox("Check the box if you would like to run batch correction", value=False)
     if st.session_state["batch"]:
         st.write("Please select the main effect(s) [metadata variables] that should be used for batch correction. The values of these main effects must be represented in at least two batches.")
@@ -109,8 +168,12 @@ def preprocess_window():
         else:
             st.warning("Upload metadata first to select batch covariates.")
 
-        st.session_state["batch_column"] = st.text_input("Column name that holds batch data", placeholder="Batch")   
-    st.session_state["gene_symbols"] = st.checkbox("Check the box if your count table is converted to symbol IDs", value=False)
+        st.session_state["batch_column"] = st.selectbox(
+                "Select metadata column that holds batch information",
+                options=meta_cols,
+                index=0
+            )   
+    st.session_state["gene_symbols"] = st.checkbox("Check the box if your transcript names are gene symbols (instead of Ensembl IDs).", value=False)
     if st.button("Submit", key="btn_preproc") and st.session_state["counts"] is not None and st.session_state["meta"] is not None:
         submit_preprocess()
         st.rerun()
@@ -123,15 +186,16 @@ st.write("OR")
 if not st.session_state["preprocessed_feather"]:
     uploaded = st.file_uploader("Upload preprocessed matrix", type=["csv", "feather"])
     if uploaded:
-         if uploaded.name.endswith(".csv"):
-              df = pd.read_csv(uploaded)
-              st.session_state["preprocessed_feather"] = io.BytesIO()
-              df.to_feather(st.session_state["preprocessed_feather"])
-              st.session_state["preprocessed_feather"] = st.session_state["preprocessed_feather"].getvalue()
-         elif uploaded.name.endswith(".feather"):
-              st.session_state["preprocessed_feather"] = uploaded.getvalue()
-         else:
-              st.error("Unsupported file type. Please upload a CSV or Feather file.")
+        if uploaded.name.endswith(".csv"):
+            df = pd.read_csv(uploaded)
+            st.session_state["preprocessed_feather"] = io.BytesIO()
+            df.to_feather(st.session_state["preprocessed_feather"])
+            st.session_state["preprocessed_feather"] = st.session_state["preprocessed_feather"].getvalue()
+        elif uploaded.name.endswith(".feather"):
+            st.session_state["preprocessed_feather"] = uploaded.getvalue()
+        else:
+            st.error("Unsupported file type. Please upload a CSV or Feather file.")
+        
 
 # Check for results first
 if not st.session_state["result_queue"].empty():
@@ -164,6 +228,8 @@ if st.session_state["preprocessed_feather"]:
     df = pd.read_feather(buf)
     st.dataframe(df)
 
+    st.session_state["integer_format"] = st.checkbox("Select if uploaded data is in integer format", value=st.session_state["integer_format"])
+    
     st.download_button(
         "Download preprocessed feather",
         data=st.session_state["preprocessed_feather"],

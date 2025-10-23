@@ -7,6 +7,10 @@ from ui_theme import apply_custom_theme
 apply_custom_theme()
 
 st.subheader("Get correlation statistic for each module")
+st.markdown('''
+        Some NMF gene modules are more similar than others, in terms of their ranking of genes by contribution scores. 
+        Use this tool to calculate the pairwise Spearman correlations between your gene modules.
+            ''')
 if "correlation_values" not in st.session_state:
     st.session_state["correlation_values"] = None
 

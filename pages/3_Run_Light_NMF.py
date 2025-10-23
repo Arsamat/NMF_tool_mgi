@@ -8,6 +8,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import zipfile
 from preview_heatmap import preview_wide_heatmap_inline
 from ui_theme import apply_custom_theme
+import json
 apply_custom_theme()
 
 
@@ -24,13 +25,18 @@ if "module_usages" not in st.session_state:
 if "previous_heatmaps" not in st.session_state:
     st.session_state["previous_heatmaps"] = {}
 
+st.subheader("Run NMF algorithm")
+st.markdown('''
+    Run NMF at your choice of k and generate a module usage heatmap. 
+    This is useful as a preliminary validation of k before running the more computationally intensive consensus NMF.
+            ''')
 
 # ---------------- Inputs ----------------
 k = st.number_input("k", 2, 50, 7)
 meta = None
 
 
-max_iter = st.number_input("max_iter", 100, 20000, 5000)
+max_iter = st.number_input("Maximum number of iterations", 100, 20000, 5000)
 
 
 if "meta" not in st.session_state or st.session_state["meta"] is None:
@@ -97,11 +103,17 @@ def read_files(content):
     zip_bytes = io.BytesIO(content)
 
     with zipfile.ZipFile(zip_bytes, "r") as z:
+        with z.open("metadata.json") as f:
+            metadata = json.load(f)
+        converged = metadata["converged"]
+        if not converged:
+            st.error("The algorithm didn't converge at a given number of iterations. Try increasing the parameter")
+
         for name in z.namelist():
             if "_w" in name:
                 with z.open(name) as f:
                     st.session_state["module_usages"] = pd.read_feather(io.BytesIO(f.read()))
-            else:
+            elif "_h" in name:
                 with z.open(name) as f:
                     st.session_state["gene_loadings"] = pd.read_feather(io.BytesIO(f.read()))
 
@@ -178,16 +190,12 @@ if st.session_state["gene_loadings"] is not None and st.session_state["module_us
         st.subheader("Wide Heatmap Preview (downsampled)")
         fig = preview_wide_heatmap_inline(df=df, meta=meta, annotation_cols=annotation_cols, step=5)
         st.pyplot(fig)
+
+        png_bytes = fig_to_png(fig)
+        st.download_button("Download heatmap (PNG)", data=png_bytes, file_name="heatmap.png", mime="image/png")
         
         st.session_state["previous_heatmaps"][k] = fig
         png_bytes = fig_to_png(fig)
-
-        st.download_button(
-            label="Download heatmap (PNG)",
-            data=png_bytes,
-            file_name="heatmap.png",
-            mime="image/png"
-        )
 
         # Save and offer full PDF
         save_wide_heatmap_pdf(df, "heatmap.pdf")
@@ -195,8 +203,9 @@ if st.session_state["gene_loadings"] is not None and st.session_state["module_us
             st.download_button(
                 "Download full heatmap (PDF)",
                 f,
-                file_name="heatmap.pdf",
+                file_name="full_heatmap.pdf",
                 mime="application/pdf",
+                key="full_heatmap"
             )
 
 if st.session_state["previous_heatmaps"]:

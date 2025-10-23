@@ -21,11 +21,14 @@ if st.session_state["preprocessed_feather"] is None:
         st.error("Need to run preprocessing first or upload preprocessed data. Please, go back to preprocessing page to do so")
 
 st.title("Run K Metrics")
+st.markdown('''
+    Light NMF (non-consensus NMF) will be running at **10** random seeds at each value of k. 
+    A silhouette score will be computed on the resulting module usage scores (matrix H) given the design factor. 
+    A **higher silhouette score** suggests a better fit.
+            ''')
 
 #meta_up = st.file_uploader("Upload metadata", type=["csv", "tsv", "txt"])
 ks = st.slider("Select range of K values", 2, 50, (2, 10))
-max_iter = st.number_input("max_iter", 100, 20000, 5000)
-design_factor = st.text_input("Design factor", "Group")
 #sample_column = st.text_input("Column name that stores sample names")
 
 #HELPER Function
@@ -60,8 +63,8 @@ if st.button("Run analysis"):
             data = {
                 "k_min": ks[0],
                 "k_max": ks[1],
-                "max_iter": max_iter,
-                "design_factor": design_factor,
+                "max_iter": 5000,
+                "design_factor": st.session_state["design_factor"],
                 "sample_column": sample_column
             }
 

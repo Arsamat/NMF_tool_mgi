@@ -9,6 +9,8 @@ if "meta" not in st.session_state:
     st.session_state["meta"] = None
 if "metadata_index" not in st.session_state:
     st.session_state["metadata_index"] = None
+if "design_factor" not in st.session_state:
+    st.session_state["design_factor"] = None
 
 st.session_state["LAMBDA_URL"] = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"   # Function URL or API GW route               # EC2 FastAPI base
 
@@ -19,8 +21,16 @@ st.session_state.setdefault("fastapi_ready", False)
 
 
 
+
 st.subheader("Start by uploading your metadata file. You won't be able to use further features without it.")
-st.write("You can come back later and upload a different file if you want to use a different data set later")
+
+st.markdown('''
+        Your metadata file should at minimum contain a column with sample names and a column indicating sample groups. Additional metadata variables can be overlayed on the usage score heatmap to help with visualization and interpretation.
+
+Samples in the module usage heatmaps will be ordered according to this metadata file. Order samples in this file in a way that reflects your experimental design, to help with visualization and interpretation of results.
+
+You can come back and upload a different file if you want to use a different data set later.
+            ''')
 
 def check_health():
         try:
@@ -60,13 +70,18 @@ if st.session_state["meta"] is not None:
     else:
         st.success("Compute node is ready.")
 
-if st.session_state["metadata_index"] is not None and st.session_state["metadata_index"] != "":
-    st.write("Column name that stores samples:")
-    st.write(st.session_state["metadata_index"])
-
 if st.session_state["meta"] is not None:
     st.write("Please, provide the name of the column that stores sample names before proceeding. Use exactly the same name as in the file")
-    sample_column = st.text_input("Enter sample name column")
+    sample_column = st.selectbox(
+            "Select the column that contains sample names:",
+            options=st.session_state["meta"].columns.tolist(),
+            index=0
+        )
+    st.session_state["design_factor"] = st.selectbox(
+            "Column name storing design group data",
+            options=st.session_state["meta"].columns.tolist(),
+            index=1
+        )
 
     if st.button("Save"):
         st.session_state["metadata_index"] = sample_column
