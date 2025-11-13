@@ -68,17 +68,18 @@ if st.button("Click to Finish Upload") and tmp_file is not None:
     if not st.session_state["ec2_start_triggered"]:
         start_ec2_once()
 
-if st.session_state["meta"] is not None:
-    st.dataframe(st.session_state["meta"])
+if st.session_state["meta"] is not None and not st.session_state["fastapi_ready"]:
     check_health()
     # 2) Poll readiness
     if not st.session_state["fastapi_ready"]:
         st.info("Waking up the compute node… this usually takes 1–4 minutes. Please, wait till it is ready to proceed.")
-        st_autorefresh(interval=80000, key="preproc_refresh")
+        st_autorefresh(interval=8000, key="preproc_refresh")
     else:
         st.success("Compute node is ready.")
 
 if st.session_state["meta"] is not None:
+    st.subheader("Metadata Uploaded")
+    st.dataframe(st.session_state["meta"])
     st.write("Please, provide the name of the column that stores sample names before proceeding. Use exactly the same name as in the file")
     sample_column = st.selectbox(
             "Select the column that contains sample names:",
