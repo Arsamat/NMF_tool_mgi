@@ -25,12 +25,20 @@ st.session_state.setdefault("fastapi_ready", False)
 st.subheader("Start by uploading your metadata file. You won't be able to use further features without it.")
 
 st.markdown('''
-        Your metadata file should at minimum contain a column with sample names and a column indicating sample groups. Additional metadata variables can be overlayed on the usage score heatmap to help with visualization and interpretation.
+        Your metadata file should at minimum contain a column with **sample names** and a column indicating **sample groups**. Additional metadata variables can be overlayed on the usage score heatmap to help with visualization and interpretation.
 
 Samples in the module usage heatmaps will be ordered according to this metadata file. Order samples in this file in a way that reflects your experimental design, to help with visualization and interpretation of results.
 
 You can come back and upload a different file if you want to use a different data set later.
             ''')
+if st.button("View Metadata File Example"):
+    example_data = {
+        "SampleName": ["Sample1", "Sample2", 'Sample3'],
+        "Group": ["Group1", "Group2", "Group3"]
+    }
+
+    df = pd.DataFrame(example_data)
+    st.dataframe(df)
 
 def check_health():
         try:
@@ -66,7 +74,7 @@ if st.session_state["meta"] is not None:
     # 2) Poll readiness
     if not st.session_state["fastapi_ready"]:
         st.info("Waking up the compute node… this usually takes 1–4 minutes. Please, wait till it is ready to proceed.")
-        st_autorefresh(interval=5000, key="preproc_refresh")
+        st_autorefresh(interval=80000, key="preproc_refresh")
     else:
         st.success("Compute node is ready.")
 
