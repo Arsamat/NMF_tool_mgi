@@ -12,7 +12,12 @@ import json
 from clustering_heatmap import plot_heatmap_with_metadata, plot_heatmap_clustered_modules
 from nmf_clustering import plot_clusters, plot_module_clusters
 from hypergeometric_test import hypergeometric
-from expression_heatmap import plot_expression_heatmap
+from make_expression_heatmap import get_expression_heatmap
+from hypergeometric import hypergeom_ui
+from module_clustering import m_clustering
+from module_heatmap import module_heatmap_ui
+import base64
+from PIL import Image
 apply_custom_theme()
 
 
@@ -36,8 +41,26 @@ if "display_loadings" not in st.session_state:
     st.session_state["display_loadings"] = False
 if "display_previous_heatmaps" not in st.session_state:
     st.session_state["display_previous_heatmaps"] = False
-if "show_clusters" not in st.session_state:
-    st.session_state["show_clusters"] = False
+if "sample_dendogram" not in st.session_state:
+    st.session_state["sample_dendogram"] = None
+if "module_dendogram" not in st.session_state:
+    st.session_state["module_dendogram"] = None
+if "sample_dendogram" not in st.session_state:
+    st.session_state["sample_dendogram"] = None
+if "sample_order_heatmap" not in st.session_state:
+    st.session_state["sample_order_heatmap"] = None
+if "module_dendogram" not in st.session_state:
+    st.session_state["module_dendogram"] = None
+if "module_order_heatmap" not in st.session_state:
+    st.session_state["module_order_heatmap"] = None
+if "top_order_heatmap" not in st.session_state:
+    st.session_state["top_order_heatmap"] = None
+if "expression_heatmap" not in st.session_state:
+    st.session_state["expression_heatmap"] = None
+if "module_leaf_order" not in st.session_state:
+    st.session_state["module_leaf_order"] = None
+if "module_cluster_labels" not in st.session_state:
+    st.session_state["module_cluster_labels"] = None
 
 
 st.subheader("Run NMF algorithm")
@@ -98,22 +121,6 @@ def save_wide_heatmap_pdf(df, filename="heatmap.pdf"):
         pdf.savefig(fig)
     plt.close(fig)
 
-
-# def preview_wide_heatmap_inline(df, step=5):
-#     """Show a safe preview by downsampling columns for Streamlit rendering."""
-#     df_small = df.iloc[:, ::step]  # take every nth sample
-#     fig, ax = plt.subplots(figsize=(20, 8))
-#     sns.heatmap(df_small, cmap="viridis", ax=ax, cbar=True)
-#     ax.set_xlabel(f"Samples (every {step}th shown)")
-#     ax.set_ylabel("Modules")
-#     #add to store for results history
-#     k = len(df.index)
-#     if k not in st.session_state["previous_heatmaps"]:
-#         st.session_state["previous_heatmaps"][k] = fig
-
-#     plt.tight_layout()
-#     st.pyplot(fig)
-#     plt.close(fig)
 
 #function to read matrices from a zip file
 def read_files(content):
@@ -244,96 +251,230 @@ if meta is not None and st.session_state["module_usages"] is not None:
             key="full_heatmap"
         )     
     if st.checkbox("Hierarchically cluster samples"):
-        leaf_order, cluster_labels = plot_clusters(st.session_state["module_usages"])
-        
-        # Save order persistently
-        if leaf_order is not None:
-            # Convert from integer indices → actual column names
-            st.session_state["sample_order"] = (
-                st.session_state["module_usages"].index[leaf_order]
-            )
-        
-        if st.session_state.get("sample_order") is not None:
-            st.markdown("### Heatmap ordered by clustering")
-            fig = plot_heatmap_with_metadata(
-                st.session_state["module_usages"].T,  
-                meta,
-                st.session_state["sample_order"],
-                cluster_labels
-            )
-            png_bytes = fig_to_png(fig)
-            st.download_button("Download heatmap (PNG)", data=png_bytes, file_name="heatmap_clustered_samples.png", mime="image/png")
+        def hex_to_png_bytes(hex_string):
+            return bytes.fromhex(hex_string)
 
-            if st.checkbox("Perform Hypergeometric test on clusters"):
-                hypergeometric(st.session_state["module_usages"], st.session_state["meta"], cluster_labels)
-            if st.checkbox("Hierarchically Cluster Rows"):
-                leaf_order2, cluster_labels2 = plot_module_clusters(st.session_state["module_usages"].T)
-                if st.session_state["sample_order"] is not None:
-                    tmp = st.session_state["module_usages"].T
-                    tmp = tmp[st.session_state["sample_order"]]
 
-                annotation_cols3 = st.multiselect(
-                    "Select metadata columns for annotation bars",
-                    options=meta.columns.tolist(),
-                    key="annotation_cols3"
-                )
-                fig = plot_heatmap_clustered_modules(
-                    df=tmp,        # modules x samples
-                    meta=st.session_state["meta"],              # metadata dataframe
-                    annotation_cols=annotation_cols3,     # overlay these
-                    module_leaf_order=leaf_order2,                # from clustering
-                    cluster_labels = cluster_labels2
-                )
-                png_bytes = fig_to_png(fig)
-                st.download_button("Download heatmap (PNG)", data=png_bytes, file_name="heatmap_clustered_modules.png", mime="image/png")
+        # ------------------------------------------------------
+        # Load data from Streamlit session state
+        # ------------------------------------------------------
+        module_usages = st.session_state["module_usages"]   # DataFrame
+        meta = st.session_state["meta"]                     # DataFrame
+        metadata_index = st.session_state["metadata_index"] # e.g. "Sample"
+
+
+        # Convert DataFrame → Feather bytes
+        def df_to_feather_bytes(df):
+            buf = io.BytesIO()
+            df.reset_index(drop=False).to_feather(buf)
+            buf.seek(0)
+            return buf
+
+
+        module_bytes = df_to_feather_bytes(module_usages)
+        meta_bytes = df_to_feather_bytes(meta)
+
+        # ------------------------------------------------------
+        # 1️⃣ CLUSTER SAMPLES
+        # ------------------------------------------------------
+        st.header("Hierarchical Clustering of Samples")
+
+        k_samples = st.number_input("Number of clusters (samples)", 2, 10, 3)
+
+        if st.button("Cluster Samples"):
+            files = {
+                "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
+                "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
+            }
+
+            data = {
+                "metadata_index": metadata_index,
+                "k": str(k_samples)
+            }
+
+            res = requests.post(st.session_state["API_URL"] + "/cluster_samples/", files=files, data=data)
+            if res.status_code != 200:
+                st.error(res.text)
+            else:
+                payload = res.json()
+
+                st.session_state["sample_leaf_order"] = payload["leaf_order"]
+                st.session_state["sample_cluster_labels"] = payload["cluster_labels"]
+                
+                sample_order = df.T.index[st.session_state["sample_leaf_order"]].tolist()
+                st.session_state["sample_order"] = sample_order
+
+                # Display dendrogram
+                dendro_png = hex_to_png_bytes(payload["dendrogram_png"])
+                st.session_state["sample_dendogram"] = dendro_png
+
+                # Display heatmap
+                #heatmap_png = hex_to_png_bytes(payload["heatmap_png"])
+                #st.subheader("Heatmap Ordered by Sample Clustering")
+                #st.image(heatmap_png)
+        
+        if st.session_state["sample_dendogram"] is not None:
+            st.subheader("Sample Dendrogram")
+            st.image(st.session_state["sample_dendogram"])
+            st.download_button(
+                        "Download PNG",
+                        data=st.session_state["sample_dendogram"],
+                        file_name="sample_dendogram.png",
+                        mime="image/png"
+                    )
+        # ------------------------------------------------------
+        # 2️⃣ ANNOTATED HEATMAP
+        # ------------------------------------------------------
+        st.header("Annotated Heatmap")
+
+        if "sample_leaf_order" not in st.session_state:
+            st.info("Run Step 1 first")
+        else:
+            tmp = meta.columns.tolist()
+            tmp = ["Cluster"] + tmp
+            
+            annotation_cols = st.multiselect(
+                "Select metadata fields for annotation bars",
+                options=tmp
+            )
+
+            if st.button("Generate Annotated Heatmap"):
+                files = {
+                    "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
+                    "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
+                }
+                
+                data = {
+                    "metadata_index": metadata_index,
+                    "leaf_order": json.dumps(st.session_state["sample_leaf_order"]),
+                    "annotation_cols": json.dumps(annotation_cols),
+                    "cluster_labels": json.dumps(st.session_state["sample_cluster_labels"])
+                }
+
+                res = requests.post(st.session_state["API_URL"] + "/annotated_heatmap/", files=files, data=data)
+                if res.status_code != 200:
+                    st.error(res.text)
+                else:
+                    st.subheader("Annotated Heatmap")
+                    st.session_state["sample_order_heatmap"] = res.content
+            
+            if st.session_state["sample_order_heatmap"] is not None:
+                st.image(st.session_state["sample_order_heatmap"])
+                st.download_button(
+                        "Download PNG",
+                        data=st.session_state["sample_order_heatmap"],
+                        file_name="sample_order_heatmap.png",
+                        mime="image/png"
+                    )
+
+            if st.checkbox("Calculate Hypergeometric Values"):
+                hypergeom_ui(meta_bytes, st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
+
+            if st.checkbox("Hierarchically Cluster Modules"):
+                st.header("📊 Cluster Modules (Rows)")
+                n_clusters_mod = st.slider("Number of module clusters (k):", 2, 12, 4)
+
+                if st.button("Run Module Clustering"):
+                    dendro_png = m_clustering(
+                        st.session_state["module_usages"],
+                        st.session_state["sample_order"],
+                        n_clusters_mod
+                    )
+                    if dendro_png:
+                        st.session_state["module_dendogram"] = dendro_png
+
+                # Display saved image (persistent)
+                if  st.session_state["module_dendogram"] is not None:
+                    st.image(st.session_state["module_dendogram"])
+                    st.download_button(
+                        "Download PNG",
+                        data=st.session_state["module_dendogram"],
+                        file_name="module_dendogram.png",
+                        mime="image/png"
+                    )
+                
+                #Get Module Heatmap
+                module_heatmap_ui(
+                            meta_bytes,
+                            st.session_state["module_usages"],
+                            st.session_state["sample_order"],
+                            st.session_state["module_leaf_order"],
+                            st.session_state["module_cluster_labels"],
+                            cnmf=False
+                        )
+
             
     if st.checkbox("Order by Top Samples"):
-        df_usage = st.session_state["module_usages"].copy()
+        def df_to_feather_bytes(df):
+            buf = io.BytesIO()
+            df.reset_index(drop=False).to_feather(buf)
+            buf.seek(0)
+            return buf
 
-        # Step 1: Assign each sample to its top module
-        sample_assignments = df_usage.idxmax(axis=1)
-        df_usage["TopModule"] = sample_assignments
-        # Step 2: Sort modules numerically (not alphabetically)
-        def numeric_module_key(name):
-            try:
-                return int(name.split("_")[-1])
-            except Exception:
-                return name  # fallback if non-standard
+        def hex_to_png_bytes(hex_string):
+            return bytes.fromhex(hex_string)
 
-        modules_sorted = sorted(sample_assignments.unique(), key=numeric_module_key)
+        module_bytes = df_to_feather_bytes(st.session_state["module_usages"])
+        meta_bytes   = df_to_feather_bytes(st.session_state["meta"])
+        metadata_index = st.session_state["metadata_index"]
 
+        annotation_cols = st.multiselect(
+            "Select metadata columns",
+            options=st.session_state["meta"].columns.tolist()
+        )
+        annotation_str = ",".join(annotation_cols)
+
+        if st.button("Generate Top-Ordered Heatmap"):
+
+            files = {
+                "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
+                "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
+            }
+
+            data = {
+                "metadata_index": metadata_index,
+                "annotation_cols": annotation_str,
+            }
+
+            res = requests.post(
+                st.session_state["API_URL"] + "/heatmap_top_samples/",
+                files=files,
+                data=data
+            )
+
+            if res.status_code != 200:
+                st.error(res.text)
+            else:
+                payload = res.json()
+
+                heatmap_png = hex_to_png_bytes(payload["heatmap_png"])
+                st.session_state["top_order_heatmap"] = heatmap_png
         
-        # Step 3: Build ordered sample list (within each module, sort by ascending usage)
-        ordered_samples = []
-        for module in modules_sorted:
-            subset = df_usage[df_usage["TopModule"] == module]
-            subset = subset.sort_values(by=module, ascending=False)  # right->left decrease
-            ordered_samples.extend(subset.index.tolist())
+        if st.session_state["top_order_heatmap"] is not None:
+            st.image(st.session_state["top_order_heatmap"])
+            st.download_button(
+                        "Download PNG",
+                        data=st.session_state["top_order_heatmap"],
+                        file_name="top_order_heatmap.png",
+                        mime="image/png"
+                    )
 
-        # Step 4: Reformat for heatmap (modules × samples)
-        df_for_heatmap = df_usage.drop(columns=["TopModule"]).T
-
-        annotation_cols2 = st.multiselect(
-            "Select metadata columns for annotation bars",
-            options=meta.columns.tolist(), key="top_sample_order"
-        )
-
-        # Step 5: Plot heatmap using the same function
-        fig = preview_wide_heatmap_inline(
-            df=df_for_heatmap,
-            meta=meta,
-            annotation_cols=annotation_cols2,
-            average_groups=False,
-            sample_order=ordered_samples
-        )
-        st.pyplot(fig)
-        png_bytes = fig_to_png(fig)
-        st.download_button("Download heatmap (PNG)", data=png_bytes, file_name="heatmap_ordered_top_samples.png", mime="image/png")
     
     if st.checkbox("Show Gene Expression Matrix"):
-        fig = plot_expression_heatmap(st.session_state["gene_loadings"], st.session_state["preprocessed_feather"])
-        png_bytes = fig_to_png(fig)
-        st.download_button("Download heatmap (PNG)", data=png_bytes, file_name="heatmap_gene_expression.png", mime="image/png")
+        heatmap = get_expression_heatmap(st.session_state["gene_loadings"])
+        if heatmap is not None:
+            st.session_state["expression_heatmap"] = heatmap
+            
+        if st.session_state["expression_heatmap"] is not None:
+            st.write("Black lines separate modules")
+            st.image(st.session_state["expression_heatmap"])
+            # Optional: Download button
+            st.download_button(
+                            "Download PNG",
+                            data=st.session_state["expression_heatmap"],
+                            file_name="gene_expression_heatmap.png",
+                            mime="image/png"
+                        )
 
 
 if st.session_state["previous_heatmaps"]:
