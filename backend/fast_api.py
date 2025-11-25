@@ -40,6 +40,13 @@ import boto3
 import tempfile
 from llm_request_functions import model_request, summarize_traceback
 import traceback, uuid, datetime, logging
+import matplotlib.patches as mpatches
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import pdist
+from scipy.stats import hypergeom
+from plot_heatmap_helpers import create_dendrogram, make_heatmap_png, build_annotations, dendogram_modules, module_annotated_heatmap
+import base64
+import matplotlib.gridspec as gridspec
 
 app = FastAPI()
 
@@ -93,7 +100,7 @@ cloudwatch = boto3.client("cloudwatch", region_name="us-east-2")
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     # Skip internal health checks
-    if request.url.path in ("/healthz", "/"):
+    if request.url.path in ("/"):
         return await call_next(request)
 
     try:
@@ -181,52 +188,25 @@ async def preprocess_data(
                 os.remove(path)
 
 @app.post("/explore_correlations")
-async def explore_corr(
-    preprocessed: UploadFile,
-    design_factor: str = Form(...),
-    k: int = Form(...),
-):
-    df_expr = pd.read_feather(io.BytesIO(await preprocessed.read()))
-    #df_expr = df_expr.set_index("SampleName")
+async def explore_corr(gene_loadings: UploadFile):
+    import traceback
     try:
-        pairs_by_k = run_spearman(
-            df_expr=df_expr,
-            k=k,
-            design_factor=design_factor,
-        )
-        print(pairs_by_k)
+        content = await gene_loadings.read()
+        df_h = pd.read_feather(io.BytesIO(content))
+        print("Received df_h shape:", df_h.shape)
+
+        pairs_by_k = run_spearman(df_H=df_h)
+        print("pairs_by_k:", pairs_by_k)
 
         return JSONResponse(content={"pairs_by_k": pairs_by_k})
 
     except Exception as e:
+        tb = traceback.format_exc()
+        print("Error in /explore_correlations:", tb)
         return JSONResponse(
             status_code=500,
-            content={"error": str(e)}
+            content={"error": str(e), "traceback": tb}
         )
-
-# def _safe_obj(x):
-#     """Recursively cast to JSON-serializable Python types."""
-#     if x is None:
-#         return None
-#     if isinstance(x, (str, int, float, bool)):
-#         return x
-#     if isinstance(x, (np.integer,)):   return int(x)
-#     if isinstance(x, (np.floating,)):  return float(x)
-#     if isinstance(x, (np.bool_,)):     return bool(x)
-#     if isinstance(x, (np.ndarray,)):   return x.tolist()
-#     if isinstance(x, Path):            return str(x)
-#     if isinstance(x, pd.Timestamp):    return x.isoformat()
-#     if isinstance(x, dict):            return {str(k): _safe_obj(v) for k, v in x.items()}
-#     if isinstance(x, (list, tuple, set)): return [_safe_obj(v) for v in x]
-#     if isinstance(x, pd.DataFrame):
-#         df = x.where(pd.notnull(x), None)  # NaN -> None
-#         recs = df.to_dict(orient="records")
-#         return [_safe_obj(r) for r in recs]
-#     if isinstance(x, pd.Series):
-#         s = x.where(pd.notnull(x), None).to_dict()
-#         return {str(k): _safe_obj(v) for k, v in s.items()}
-#     # Fallback: stringize
-#     return str(x)
 
 
 def process_single_run(expr_path, meta_path, k, run, max_iter, design_factor, sample_column, tmp_dir):
@@ -244,7 +224,7 @@ def process_single_run(expr_path, meta_path, k, run, max_iter, design_factor, sa
         print(f"[{time.strftime('%H:%M:%S')}] Start K={k}, run={i}, PID={pid}")
 
         seed = random.randint(1, 42)
-        _, df_w = do_NMF(df_expr, design_factor, n_components=k, max_iter=max_iter, seed=seed)
+        df_h, df_w, _ = do_NMF(df_expr, design_factor, n_components=k, max_iter=max_iter, seed=seed)
 
         out = os.path.join(tmp_dir, f"across_k_{k}/run_{run}")
         os.makedirs(out, exist_ok=True)
@@ -368,7 +348,7 @@ async def run_nmf_files(
 ):
     df_expr = pd.read_feather(io.BytesIO(await preprocessed.read()))
     try:
-        df_h, df_w = do_NMF(
+        df_h, df_w, converged = do_NMF(
             n_components = k,
             df_expr = df_expr,
             max_iter = max_iter,
@@ -386,6 +366,9 @@ async def run_nmf_files(
             w_buf = io.BytesIO()
             df_w.to_feather(w_buf)
             zip_file.writestr("nmf_w.feather", w_buf.getvalue())
+
+            metadata = {"converged": bool(converged)}
+            zip_file.writestr("metadata.json", json.dumps(metadata, indent=2))
 
         zip_buf.seek(0)
         return StreamingResponse(
@@ -532,42 +515,501 @@ async def process_gene_loadings(
     return JSONResponse(content=jsonable_encoder(results))
 
 
-# #Run Pathway Analysis
-# @app.post("/run_pathview/")
-# async def run_pathview(file: UploadFile = File(...)):
-#     # 1. Save uploaded file temporarily
-#     input_path = f"/tmp/{file.filename}"
-#     with open(input_path, "wb") as f:
-#         f.write(await file.read())
+#Run Pathway Analysis
+@app.post("/run_pathview/")
+async def run_pathview(file: UploadFile = File(...), 
+                gene_format: str = Form(None)):
+    # 1. Save uploaded file temporarily
+    input_path = f"/tmp/{file.filename}"
+    with open(input_path, "wb") as f:
+        f.write(await file.read())
     
-#     out_root = "/tmp/pathview_output"
-#     os.makedirs(out_root, exist_ok=True)
+    out_root = "/tmp/pathview_output"
+    os.makedirs(out_root, exist_ok=True)
+    print("Input path:", input_path)
+    print("Output dir:", out_root)
+    print("Gene format:", gene_format)
+    # 2. Call R script
+    result = subprocess.run(
+        ["Rscript", "pathway_analysis.R", input_path, out_root, gene_format],
+        #capture_output=True,
+        #text=True,
+        check=True
+    )
+    print("STDOUT:\n", result.stdout)
+    print("STDERR:\n", result.stderr)
 
-#     # 2. Call R script
-#     result = subprocess.run(
-#         ["Rscript", "pathway_analysis.R", input_path, out_root],
-#         #capture_output=True,
-#         #text=True,
-#         check=True
-#     )
-#     print("STDOUT:\n", result.stdout)
-#     print("STDERR:\n", result.stderr)
+    zip_path = out_root + "/pathway_results.zip"   # R printed the zip path
 
-#     zip_path = out_root + "/pathway_results.zip"   # R printed the zip path
+    # task = BackgroundTask(
+    #         cleanup_after_send,
+    #         files=[zip_path, input_path],
+    #         dirs=[out_root]
+    #     )
+    # 3. Return zip file to user
+    zip_path = "bundle.zip"
+    with zipfile.ZipFile(zip_path, "w") as zipf:
+        zipf.write(out_root + "/pathway_results.zip",  arcname="pathway_results.zip")
+        zipf.write(out_root + "/kegg_dataframe.csv",  arcname="kegg_dataframe.csv")
+    return FileResponse(zip_path, media_type="application/zip", filename="bundle.zip")
+
+def build_color_annotations(meta_aligned, annotation_cols):
+    palettes = [
+        "Set1", "Set2", "Paired", "Pastel1", "Pastel2",
+        "Dark2", "Accent", "tab10", "tab20"
+    ]
+
+    col_colors = pd.DataFrame(index=meta_aligned.index)
+    lut = {}
+
+    if annotation_cols:
+        for i, col in enumerate(annotation_cols):
+            if col not in meta_aligned.columns:
+                continue
+
+            unique_vals = pd.unique(meta_aligned[col].dropna())
+            palette = sns.color_palette(palettes[i % len(palettes)], n_colors=len(unique_vals))
+            lut[col] = dict(zip(unique_vals, palette))
+
+            col_colors[col] = meta_aligned[col].astype(object).map(lut[col])
+
+    return col_colors, lut
+
+
+def make_heatmap(df_reordered, col_colors, lut, annotation_cols):
+    num_genes = df_reordered.shape[0]
+    fig_height = max(10, num_genes * 0.2)
+
+    g = sns.clustermap(
+        df_reordered,
+        cmap=sns.color_palette("Reds", as_cmap=True),
+        figsize=(30, fig_height),
+        col_colors=col_colors if col_colors is not None and not col_colors.empty else None,
+        col_cluster=False,
+        row_cluster=False,
+        cbar_kws={"orientation": "vertical", "shrink": 0.5},
+        xticklabels=False,
+        yticklabels=True
+    )
+
+    # Move colorbar left
+    cbar = g.ax_heatmap.collections[0].colorbar
+    cbar.ax.set_position([0.08, 0.25, 0.02, 0.4])
+    cbar.set_label("Expression Level", fontsize=12)
+
+    # Fix labels
+    g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), fontsize=12)
+    g.ax_heatmap.tick_params(axis="y", labelsize=11, pad=10)
+    g.ax_heatmap.set_xticklabels([])
+    g.ax_heatmap.set_ylabel("Genes", fontsize=12)
+
+    # Add annotation legends
+    if annotation_cols and lut and col_colors is not None and not col_colors.empty:
+        legend_entries = []
+        for col in annotation_cols:
+            if col not in lut:
+                continue
+            for label, color in lut[col].items():
+                legend_entries.append(mpatches.Patch(color=color, label=f"{col}: {label}"))
+
+        if legend_entries:
+            g.ax_col_dendrogram.legend(
+                handles=legend_entries,
+                loc="center",
+                ncol=2,
+                frameon=False,
+                prop={'size': 14},
+            )
+
+    plt.title("Top Genes Expression Heatmap", fontsize=14, pad=10)
+    return g
+
+
+# ----------------------------------------------
+# Main API Endpoint
+# ----------------------------------------------
+@app.post("/plot_heatmap/")
+async def plot_heatmap(
+    gene_loadings: UploadFile = File(...),
+    preprocessed_df: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    annotation_cols: str = Form(...),     # JSON string list
+    metadata_index: str = Form(...),
+    X: int = Form(10),
+):
+    """
+    Returns a PNG heatmap computed fully in-memory.
+    """
+    # -----------------------------
+    # Load feather inputs
+    # -----------------------------
+    gl_bytes = await gene_loadings.read()
+    pp_bytes = await preprocessed_df.read()
+    meta_bytes = await metadata.read()
+
+    gene_loadings_df = pd.read_feather(io.BytesIO(gl_bytes))
+    df = pd.read_feather(io.BytesIO(pp_bytes))
+    meta = pd.read_feather(io.BytesIO(meta_bytes))
+
+    # Convert annotation_cols string → list
     
-#     # 3. Return zip file to user
-#     response = FileResponse(
-#         zip_path,
-#         filename="pathway_results.zip",
-#         media_type="application/zip"
-#     )
+    annotation_cols = json.loads(annotation_cols)
 
+    # -----------------------------
+    # Extract top X genes per module
+    # -----------------------------
+    df_long = gene_loadings_df.stack().reset_index()
+    df_long.columns = ["module", "gene", "loading"]
+    df_long = df_long.drop(0, errors="ignore")
 
-#     # 4. Cleanup after sending
-#     @response.background
-#     def cleanup():
-#         os.remove(zip_path)
-#         os.remove(input_path)
-#         os.rmdir(out_root)
+    unique_df = df_long.loc[df_long.groupby("gene")["loading"].idxmax()]
 
-#     return response
+    grouped_genes = (
+        unique_df.sort_values(["module", "loading"], ascending=[True, False])
+        .groupby("module")
+        .head(X)
+    )
+
+    module_labels = grouped_genes[["module", "gene"]]
+    cluster_boundaries = []
+
+    for i in range(1, len(module_labels)):
+        if module_labels.iloc[i, 0] != module_labels.iloc[i - 1, 0]:
+            cluster_boundaries.append(i)
+
+    genes_graph = list(grouped_genes["gene"])
+
+    # -----------------------------
+    # Build expression matrix
+    # -----------------------------
+    df = df.T.reset_index()
+    df = df[df["Geneid"].isin(genes_graph)]
+    df["Category"] = pd.Categorical(df["Geneid"], categories=genes_graph, ordered=True)
+    df_ordered = df.sort_values("Category").drop(columns={"Category"})
+    df_plot = df_ordered.set_index("Geneid")
+
+    # -----------------------------
+    # Align metadata
+    # -----------------------------
+    meta = meta.set_index(metadata_index)
+    meta_aligned = meta.loc[df_plot.columns.intersection(meta.index)]
+
+    # -----------------------------
+    # Build annotation & plot
+    # -----------------------------
+    col_colors, lut = build_color_annotations(meta_aligned, annotation_cols)
+    g = make_heatmap(df_plot, col_colors, lut, annotation_cols)
+
+    # Add cluster separation lines
+    for y in cluster_boundaries:
+        g.ax_heatmap.hlines(
+            y=y,
+            xmin=0,
+            xmax=df_plot.shape[1],
+            colors="black",
+            linewidth=3,
+            linestyles="-",
+            zorder=10,
+        )
+
+    # -----------------------------
+    # Return PNG buffer
+    # -----------------------------
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+    plt.close()
+    buf.seek(0)
+
+    return StreamingResponse(buf, media_type="image/png")
+
+#Hierarchical Clustering Heatmap
+@app.post("/cluster_samples/")
+async def cluster_samples(
+    module_usages: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    metadata_index: str = Form(...),
+    k: int = Form(3)
+):
+    df = pd.read_feather(io.BytesIO(await module_usages.read()))
+    df.columns = ["Sample"] + list(df.columns[1:])
+    df = df.set_index("Sample")
+
+    meta = pd.read_feather(io.BytesIO(await metadata.read())).set_index(metadata_index)
+
+    # --- clustering
+    dist = pdist(df, metric="euclidean")
+    Z = linkage(dist, method="ward")
+    cluster_labels = fcluster(Z, k, criterion="maxclust")
+
+    # --- dendrogram
+    leaf_order, dendro_png = create_dendrogram(Z, cluster_labels, "Sample Clustering")
+
+    # --- reorder df
+    ordered_cols = df.index[leaf_order]
+    heatmap_png = make_heatmap_png(df.loc[ordered_cols].T)
+
+    return {
+        "leaf_order": leaf_order,
+        "cluster_labels": cluster_labels.tolist(),
+        "dendrogram_png": dendro_png.getvalue().hex(),
+        "heatmap_png": heatmap_png.getvalue().hex(),
+    }
+
+@app.post("/annotated_heatmap/")
+async def annotated_heatmap(
+    module_usages: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    metadata_index: str = Form(...),
+    leaf_order: str = Form(...),
+    annotation_cols: str = Form("[]"),
+    cluster_labels: str = Form("[]")
+):
+    leaf_order = json.loads(leaf_order)
+    annotation_cols = json.loads(annotation_cols)
+    cluster_labels = json.loads(cluster_labels)
+
+    # Load module usage matrix
+    df = pd.read_feather(io.BytesIO(await module_usages.read()))
+    df.columns = ["Sample"] + list(df.columns[1:])
+    df = df.set_index("Sample")
+
+    # Compute sample order from leaf indices
+    sample_order = df.index[leaf_order].tolist()
+    ordered_df = df.loc[sample_order].T
+
+    # Load metadata aligned to sample order
+    meta = pd.read_feather(io.BytesIO(await metadata.read())).set_index(metadata_index)
+    meta_aligned = meta.loc[sample_order]
+
+    # Handle Cluster annotation
+    if "Cluster" in annotation_cols:
+
+        if len(cluster_labels) != len(df.index):
+            raise ValueError("Cluster label length mismatch")
+
+        cluster_labels_ordered = [cluster_labels[i] for i in leaf_order]
+        meta_aligned["Cluster"] = cluster_labels_ordered
+
+    # Build annotations
+    col_colors_df, lut = build_annotations(meta_aligned, annotation_cols)
+
+    # IMPORTANT: pass DataFrame directly — NO transpose
+    col_colors = col_colors_df
+
+    if len(annotation_cols) == 0:
+        col_colors = None
+        lut = {}
+    else:
+        col_colors, lut = build_annotations(meta_aligned, annotation_cols)
+
+    # Render heatmap
+    heatmap_png = make_heatmap_png(
+        df=ordered_df,
+        col_colors=col_colors,
+        lut=lut,
+    )
+
+    return StreamingResponse(heatmap_png, media_type="image/png")
+
+@app.post("/hypergeom/")
+async def hypergeom_endpoint(
+    module_usages: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    metadata_index: str = Form(...),
+    cluster_labels: str = Form(...),
+    cluster_id: int = Form(...),
+    selected_values: str = Form(...)   # {"Genotype":"TDP43", "Dose":"EC10"}
+):
+    # Decode JSON inputs
+    cluster_labels = json.loads(cluster_labels)
+    selected_values = json.loads(selected_values)
+
+    # ---------------------------------------------------------
+    # Load dataframes
+    # ---------------------------------------------------------
+    mod = pd.read_feather(io.BytesIO(await module_usages.read()))
+    mod.columns = ["Sample"] + list(mod.columns[1:])
+    mod = mod.set_index("Sample")
+
+    meta = pd.read_feather(io.BytesIO(await metadata.read()))
+    meta = meta.set_index(metadata_index)
+
+    # ---------------------------------------------------------
+    # Step 1: Identify samples in selected cluster
+    # ---------------------------------------------------------
+    cluster_labels = np.array(cluster_labels)
+    cluster_mask = (cluster_labels == cluster_id)
+    sample_order = mod.index[cluster_mask]   # samples in this cluster
+
+    # ---------------------------------------------------------
+    # Step 2: Hypergeometric variables
+    # ---------------------------------------------------------
+    M = len(mod.index)                 # total samples
+    N = len(sample_order)              # samples in selected cluster
+
+    # n = number of samples matching metadata condition
+    mask_n = pd.Series(True, index=meta.index)
+    for col, val in selected_values.items():
+        mask_n &= (meta[col] == val)
+    n = mask_n.sum()
+
+    # k = samples matching metadata condition inside the cluster
+    meta_filtered = meta.loc[sample_order]
+    mask_k = pd.Series(True, index=meta_filtered.index)
+    for col, val in selected_values.items():
+        mask_k &= (meta_filtered[col] == val)
+    k = mask_k.sum()
+
+    # ---------------------------------------------------------
+    # Step 3: Compute p-value
+    # ---------------------------------------------------------
+    p_value = hypergeom.sf(k - 1, M, n, N)
+
+    return JSONResponse({
+    "cluster_id": int(cluster_id),
+    "M_total_samples": int(M),
+    "N_cluster_samples": int(N),
+    "n_matching_metadata": int(n),
+    "k_cluster_metadata_intersection": int(k),
+    "p_value": float(p_value)
+})
+
+@app.post("/cluster_modules/")
+async def cluster_modules(
+    module_usages: UploadFile = File(...),
+    sample_order: str = Form(...),
+    n_clusters: int = Form(...)
+):
+    # ----------------------------------------------------------
+    # 1. Decode sample ordering (list of sample names)
+    # ----------------------------------------------------------
+    sample_order = json.loads(sample_order)
+
+    # ----------------------------------------------------------
+    # 2. Load module usage matrix
+    # ----------------------------------------------------------
+    df = pd.read_feather(io.BytesIO(await module_usages.read()))
+    df.columns = ["Sample"] + list(df.columns[1:])
+    df = df.set_index("Sample")
+
+    # ----------------------------------------------------------
+    # 3. Reorder samples using sample clustering order
+    # ----------------------------------------------------------
+    df = df.loc[sample_order]      # samples now in correct order
+    df = df.T                      # modules × samples
+
+    return dendogram_modules(df, n_clusters)
+
+@app.post("/module_heatmap/")
+async def module_heatmap(
+    module_usages: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    metadata_index: str = Form(...),
+    sample_order: str = Form(...),
+    module_leaf_order: str = Form(...),
+    module_cluster_labels: str = Form(...),
+    annotation_cols: str = Form("[]")
+):
+
+    # ----------------------------------------------------------
+    # 1. Decode incoming JSON lists
+    # ----------------------------------------------------------
+    sample_order = json.loads(sample_order)
+    module_leaf_order = [int(i) for i in json.loads(module_leaf_order)]
+    module_cluster_labels = [int(i) for i in json.loads(module_cluster_labels)]
+    annotation_cols = json.loads(annotation_cols)
+
+    # ----------------------------------------------------------
+    # 2. Load module usages
+    # ----------------------------------------------------------
+    df = pd.read_feather(io.BytesIO(await module_usages.read()))
+    df.columns = ["Sample"] + list(df.columns[1:])
+    df = df.set_index("Sample")
+
+    # Reorder samples by preserved sample order
+    df = df.loc[sample_order]
+    df = df.T  # modules × samples
+
+    # ----------------------------------------------------------
+    # 3. Reorder modules by module_leaf_order
+    # ----------------------------------------------------------
+    df_reordered = df.iloc[module_leaf_order, :]
+
+    # Also reorder module cluster labels to match the heatmap
+    cluster_labels_ordered = [module_cluster_labels[i] for i in module_leaf_order]
+
+    # ----------------------------------------------------------
+    # 4. Load metadata for column annotations
+    # ----------------------------------------------------------
+    meta = pd.read_feather(io.BytesIO(await metadata.read()))
+    meta = meta.set_index(metadata_index)
+    meta = meta.loc[sample_order]   # same order as heatmap columns
+
+    return module_annotated_heatmap(df_reordered, meta, annotation_cols, cluster_labels_ordered, module_leaf_order)
+
+def fig_to_hex_png(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+    fig.clf()
+    buf.seek(0)
+    return buf.read().hex()
+
+@app.post("/heatmap_top_samples/")
+async def heatmap_top_samples(
+    module_usages: UploadFile = File(...),
+    metadata: UploadFile = File(...),
+    annotation_cols: str = Form(""),
+    metadata_index: str = Form(...)
+):
+
+    # -----------------------------------------------------
+    # Load DataFrames
+    # -----------------------------------------------------
+    df_usage = pd.read_feather(io.BytesIO(await module_usages.read()))
+    df_usage = df_usage.set_index(df_usage.columns[0])
+
+    meta = pd.read_feather(io.BytesIO(await metadata.read()))
+    meta = meta.set_index(metadata_index)
+
+    annotation_cols_list = (
+        [c for c in annotation_cols.split(",") if c.strip()]
+        if annotation_cols else []
+    )
+
+    # -----------------------------------------------------
+    # TOP MODULE ORDERING
+    # -----------------------------------------------------
+    sample_assignments = df_usage.idxmax(axis=1)
+    df_usage["TopModule"] = sample_assignments
+
+    def numeric_key(x):
+        try:
+            return int(x.split("_")[-1])
+        except:
+            return x
+
+    modules_sorted = sorted(sample_assignments.unique(), key=numeric_key)
+
+    ordered_samples = []
+    for mod in modules_sorted:
+        subset = df_usage[df_usage["TopModule"] == mod]
+        subset = subset.sort_values(by=mod, ascending=False)
+        ordered_samples.extend(subset.index.tolist())
+
+    df_plot = df_usage.drop(columns=["TopModule"]).T
+    df_plot = df_plot[ordered_samples]
+
+    if len(annotation_cols_list) == 0:
+        col_colors = None
+        lut = {}
+    else:
+        col_colors, lut = build_annotations(meta.loc[ordered_samples], annotation_cols_list)
+
+    buf = make_heatmap_png(df_plot, col_colors=col_colors, lut=lut)
+
+    # return hex string instead of bytes
+    return {
+        "heatmap_png": buf.getvalue().hex(),
+        "ordered_samples": ordered_samples,
+    }
+

@@ -22,11 +22,13 @@ get_sep <- function(fname) {
 }
 
 count_sep <- get_sep(count_data_file)
+
 meta_sep  <- get_sep(sample_metadata_file)
 
 # LOAD DATA ###################################################
 count_data <- read.delim(count_data_file, sep = count_sep, header = TRUE, stringsAsFactors = FALSE)
 
+print(colnames(count_data))
 # Assume first column is gene IDs
 gene_ids <- count_data[,1]
 gene_ids <- make.unique(as.character(gene_ids))
@@ -44,8 +46,21 @@ rownames(sample_data) <- sample_data[[meta_index_col]]
 sample_data[[meta_index_col]] <- NULL  # drop index col now redundant
 
 # Sort both to align
-sample_data <- sample_data[order(rownames(sample_data)), , drop=FALSE]
-count_data  <- count_data[,order(colnames(count_data))]
+common_samples <- intersect(rownames(sample_data), colnames(count_data))
+
+if (length(common_samples) == 0) {
+  stop("FATAL ERROR: No matching sample IDs between metadata and count matrix.")
+}
+
+# Subset both tables to shared samples, preserving metadata order
+sample_data <- sample_data[common_samples, , drop = FALSE]
+count_data  <- count_data[, common_samples, drop = FALSE]
+
+# Sanity check
+if (!isTRUE(all.equal(rownames(sample_data), colnames(count_data)))) {
+  msg <- all.equal(rownames(sample_data), colnames(count_data))
+  stop(paste("FATAL ERROR: Sample IDs still mismatch:", msg))
+}
 
 # Ensure sample IDs match
 if (!isTRUE(all.equal(rownames(sample_data), colnames(count_data)))) {
@@ -102,7 +117,7 @@ if (batch) {
 gene_vars <- apply(lcpm_rbe, 1, var)
 ranked_idx <- order(gene_vars, decreasing = TRUE)
 
-H <- 5000
+H <- hvg
 top_genes <- rownames(lcpm_rbe)[ranked_idx[1:H]]
 
 lcpm_rbe_top <- lcpm_rbe[top_genes, ]

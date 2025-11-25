@@ -59,9 +59,10 @@ def transform_ids(df_link, gene_column):
     df.reset_index(drop=True, inplace=True)
     print(df.columns)
     # Always save as CSV (overwrites input file path, regardless of extension)
-    df.to_csv(df_link, index=False)
+    new_path = df_link.replace("txt", "csv")
+    df.to_csv(new_path, sep=",", index=False)
 
-    return df
+    return df, new_path
 
 
 #Function to determine which delimiter to use to read the file
@@ -87,7 +88,8 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
                           batch_include=[]):
     
     if not symbols:
-        counts = transform_ids(counts_link, gene_column)
+        counts, new_path = transform_ids(counts_link, gene_column)
+    
 
     tmp_dir = tempfile.mkdtemp(prefix="preprocess_")
     out_dir = os.path.join(tmp_dir, "filtered_batched_counts.tsv")
@@ -95,7 +97,7 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
     cmd = [
         "Rscript",
         "./filter_batch.R",  # path to your R script
-        counts_link,
+        new_path,
         metadata_link,
         out_dir,
         design_factor,
@@ -213,6 +215,7 @@ def do_NMF(df_expr,
 
     # --- Multiplicative updates ---
     errors = []
+    converged = False
     for i in range(max_iter):
         WH = W @ H
         H *= (W.T @ X) / (W.T @ WH + 1e-8)
@@ -226,8 +229,12 @@ def do_NMF(df_expr,
             if verbose:
                 print(f"Iter {i}: error={err:.4f}")
             if len(errors) > 1 and abs(errors[-2] - errors[-1]) < tol:
+                converged = True
+                print(f"NMF converged at iteration {i} with error={err:.4f}")
                 break
 
+    if not converged:
+        print(f"⚠️ NMF did not converge after {max_iter} iterations (last error={errors[-1]:.4f})")
     print("NMF execution time:", time.time() - nmf_start)
 
     # Convert back to pandas
@@ -239,7 +246,7 @@ def do_NMF(df_expr,
     df_h = pd.DataFrame(H, index=[f"Module_{i+1}" for i in range(n_components)],
                         columns=df_expr.columns)
 
-    return df_h, df_w
+    return df_h, df_w, converged
 
 #if __name__ == "__main__":
 #    do_NMF(counts_link="250729_ensemblid_counts.tsv")
