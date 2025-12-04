@@ -16,6 +16,7 @@ from module_clustering import m_clustering
 from module_heatmap import module_heatmap_ui
 import base64
 from PIL import Image
+import functools
 apply_custom_theme()
 
 
@@ -59,6 +60,20 @@ if "module_leaf_order" not in st.session_state:
     st.session_state["module_leaf_order"] = None
 if "module_cluster_labels" not in st.session_state:
     st.session_state["module_cluster_labels"] = None
+
+@st.cache_resource
+def load_preprocessed(feather_bytes):
+    return pd.read_feather(io.BytesIO(feather_bytes))
+
+@st.cache_data
+def cached_preview_heatmap(df, meta, annotation_cols, average_groups):
+    annotation_cols = list(annotation_cols)
+    return preview_wide_heatmap_inline(
+        df=df,
+        meta=meta,
+        annotation_cols=annotation_cols,
+        average_groups=average_groups
+    )
 
 
 st.subheader("Run NMF algorithm")
@@ -229,7 +244,7 @@ if meta is not None and st.session_state["module_usages"] is not None:
         value=False
     )
 
-    fig = preview_wide_heatmap_inline(df=df, meta=meta, annotation_cols=annotation_cols, average_groups=average_groups)
+    fig = cached_preview_heatmap(df, meta, tuple(annotation_cols), average_groups)
     st.pyplot(fig)
 
     png_bytes = fig_to_png(fig)
