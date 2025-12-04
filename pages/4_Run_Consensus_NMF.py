@@ -9,7 +9,6 @@ import queue
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
 from ui_theme import apply_custom_theme
-from clustering_heatmap import plot_heatmap_with_metadata
 from nmf_clustering import plot_clusters
 from preview_heatmap import preview_wide_heatmap_inline
 from make_expression_heatmap import get_expression_heatmap

@@ -9,9 +9,7 @@ import zipfile
 from preview_heatmap import preview_wide_heatmap_inline
 from ui_theme import apply_custom_theme
 import json
-from clustering_heatmap import plot_heatmap_with_metadata, plot_heatmap_clustered_modules
 from nmf_clustering import plot_clusters, plot_module_clusters
-from hypergeometric_test import hypergeometric
 from make_expression_heatmap import get_expression_heatmap
 from hypergeometric import hypergeom_ui
 from module_clustering import m_clustering
