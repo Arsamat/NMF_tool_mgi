@@ -41,6 +41,7 @@ DEFAULTS = {
     "module_leaf_order": None,
     "module_cluster_labels": None,
     "preview_png": None,
+    "annotations_default": None
 }
 
 for key, value in DEFAULTS.items():
@@ -195,7 +196,8 @@ st.subheader("Wide Heatmap Preview (downsampled)")
 with st.form("preview_form"):
     annotation_cols = st.multiselect(
         "Select metadata columns",
-        options=meta.columns.tolist()
+        options=meta.columns.tolist(),
+        key="annotations_widget"
     )
 
     average_groups = st.checkbox("Average groups (smooth)")
@@ -203,6 +205,7 @@ with st.form("preview_form"):
     submitted = st.form_submit_button("Generate Preview")
 
 if submitted:
+    st.session_state["annotations_default"] = annotation_cols
     common_samples = [s for s in meta[st.session_state["metadata_index"]] if s in df.columns]
 
     if not common_samples:
@@ -272,32 +275,40 @@ if st.checkbox("Hierarchically cluster samples"):
     # ANNOTATED HEATMAP
     st.header("Annotated Heatmap")
     if "sample_leaf_order" in st.session_state:
-        annotation_cols = st.multiselect(
-            "Annotation columns",
-            ["Cluster"] + meta.columns.tolist()
-        )
+        with st.form("annotated_heatmap_form"):
+            annotation_cols_annot = st.multiselect(
+                "Annotation columns",
+                ["Cluster"] + meta.columns.tolist(),
+                default=st.session_state["annotations_default"]
+            )
+            submit_annot = st.form_submit_button("Generate Annotated Heatmap")
 
-        if st.button("Generate Annotated Heatmap"):
+        if submit_annot:
             files = {
                 "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                 "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
             }
-
             data = {
                 "metadata_index": st.session_state["metadata_index"],
                 "leaf_order": json.dumps(st.session_state["sample_leaf_order"]),
-                "annotation_cols": json.dumps(annotation_cols),
+                "annotation_cols": json.dumps(annotation_cols_annot),
                 "cluster_labels": json.dumps(st.session_state["sample_cluster_labels"]),
             }
 
-            resp = requests.post(st.session_state["API_URL"] + "/annotated_heatmap/", files=files, data=data)
-            if resp.status_code != 200:
-                st.error(resp.text)
-            else:
+            resp = requests.post(st.session_state["API_URL"] + "/annotated_heatmap/", 
+                                files=files, data=data)
+
+            if resp.status_code == 200:
                 st.session_state["sample_order_heatmap"] = resp.content
+            else:
+                st.error(resp.text)
+
 
         if st.session_state["sample_order_heatmap"] is not None:
             st.image(st.session_state["sample_order_heatmap"])
+    
+    if st.checkbox("Calculate Hypergeometric Values"):
+        hypergeom_ui(meta_bytes, st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
 
     # MODULE CLUSTERING
     if st.checkbox("Hierarchically Cluster Modules"):
@@ -328,10 +339,13 @@ if st.checkbox("Hierarchically cluster samples"):
 
 # ORDER BY TOP SAMPLES
 if st.checkbox("Order by Top Samples"):
+    with st.form("annotated_top_samples_form"):
+        annotation_cols = st.multiselect("Select metadata columns", 
+                            meta.columns.tolist(),
+                            default = st.session_state["annotations_default"])
+        submit_top_samples = st.form_submit_button("Generate Annotated Heatmap")
 
-    annotation_cols = st.multiselect("Select metadata columns", meta.columns.tolist())
-
-    if st.button("Generate Top-Ordered Heatmap"):
+    if submit_top_samples:
         files = {
             "module_usages": ("modules.feather", cached_feather_bytes(st.session_state["module_usages"]), "application/octet-stream"),
             "metadata": ("meta.feather", cached_feather_bytes(meta), "application/octet-stream"),

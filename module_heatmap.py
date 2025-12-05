@@ -33,15 +33,17 @@ def module_heatmap_ui(
         return
 
     meta = st.session_state["meta"]
-
-    annotation_cols = st.multiselect(
-        "Select sample metadata to annotate:",
-        options=meta.columns.tolist(),
-        key=("cnmf_ann_cols" if cnmf else "nmf_ann_cols")
-    )
+    with st.form("annotated_module_cluster_form"):
+        annotation_cols = st.multiselect(
+            "Select sample metadata to annotate:",
+            options=meta.columns.tolist(),
+            key=("cnmf_ann_cols" if cnmf else "nmf_ann_cols"),
+            default=st.session_state["annotations_default"]
+        )
+        submit_module_cluster = st.form_submit_button("Generate Annotated Heatmap")
 
     # ---------- RUN ONLY WHEN BUTTON CLICKED ----------
-    if st.button("Generate Module Heatmap", key=("cnmf_heatmap_btn" if cnmf else "nmf_heatmap_btn")):
+    if submit_module_cluster:
 
         # prepare module usages
         buf_mod = BytesIO()
