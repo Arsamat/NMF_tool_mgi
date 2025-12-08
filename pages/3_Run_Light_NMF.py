@@ -33,6 +33,8 @@ DEFAULTS = {
     "display_loadings": False,
     "display_previous_heatmaps": False,
     "sample_dendogram": None,
+    "initial_sample_dendogram": None,
+    "initial_module_dendogram": None,
     "module_dendogram": None,
     "sample_order_heatmap": None,
     "module_order_heatmap": None,
@@ -245,12 +247,31 @@ if st.session_state["preview_png"] is not None:
 
 # SAMPLE CLUSTERING
 if st.checkbox("Hierarchically cluster samples"):
-
-    st.header("Cluster Samples")
-    k_samples = st.number_input("Number of clusters", 2, 10, 3)
-
     module_bytes = cached_feather_bytes(st.session_state["module_usages"])
     meta_bytes = cached_feather_bytes(meta)
+
+    st.subheader("Step 1: Run Hierarchical Clustering of Samples to Determine Number of Clusters")
+    if st.button("Run"):
+        files = {
+            "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
+            "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
+        }
+        data = {"metadata_index": st.session_state["metadata_index"], "k": 0}
+
+        resp = requests.post(st.session_state["API_URL"] + "/cluster_samples/", files=files, data=data)
+        if resp.status_code != 200:
+            st.error(resp.text)
+        else:
+            payload = resp.json()
+            st.session_state["initial_sample_dendogram"] = bytes.fromhex(payload["dendrogram_png"])
+        
+    if st.session_state["initial_sample_dendogram"]:
+        st.image(st.session_state["initial_sample_dendogram"])
+
+
+
+    st.subheader("Step 2: Run Run Hierarchical Clustering of Samples Broken Down Into Selected Number of Clusters")
+    k_samples = st.number_input("Number of clusters", 2, 10, 3)
 
     if st.button("Run Sample Clustering"):
         files = {
@@ -266,20 +287,22 @@ if st.checkbox("Hierarchically cluster samples"):
             payload = resp.json()
             st.session_state["sample_leaf_order"] = payload["leaf_order"]
             st.session_state["sample_cluster_labels"] = payload["cluster_labels"]
+            st.session_state["sample_order"] = payload["sample_order"]
             st.session_state["sample_dendogram"] = bytes.fromhex(payload["dendrogram_png"])
+            st.session_state["sample_order_heatmap"] = bytes.fromhex(payload["heatmap_png"])
 
     if st.session_state["sample_dendogram"] is not None:
         st.subheader("Sample Dendrogram")
         st.image(st.session_state["sample_dendogram"])
 
     # ANNOTATED HEATMAP
-    st.header("Annotated Heatmap")
+    st.subheader("Step 3: Create Annotated Heatmap Based on Sample Clustering Order from Previous Step")
     if "sample_leaf_order" in st.session_state:
-        with st.form("annotated_heatmap_form"):
+        with st.form("Annotated_heatmap_form"):
             annotation_cols_annot = st.multiselect(
                 "Annotation columns",
                 ["Cluster"] + meta.columns.tolist(),
-                default=st.session_state["annotations_default"]
+                default=["Cluster"] + st.session_state["annotations_default"]
             )
             submit_annot = st.form_submit_button("Generate Annotated Heatmap")
 
@@ -312,6 +335,18 @@ if st.checkbox("Hierarchically cluster samples"):
 
     # MODULE CLUSTERING
     if st.checkbox("Hierarchically Cluster Modules"):
+        st.subheader("Step 1: Visualise Hierarchical Clustering of Modules")
+        if st.button("Run", key="module_clusters"):
+            st.session_state["initial_module_dendogram"] = m_clustering(
+                st.session_state["module_usages"],
+                st.session_state["sample_order"],
+                0
+            )
+        if st.session_state["initial_module_dendogram"]:
+                st.image(st.session_state["initial_module_dendogram"])
+        
+        st.subheader("Step 2: Select Number of Module Clusters")
+        st.write("Clusters will be distinguished based on label colors")
 
         st.header("Cluster Modules")
         n = st.slider("Module clusters", 2, 12, 4)

@@ -16,7 +16,7 @@ def module_heatmap_ui(
     Persistent display. Supports NMF and CNMF based on `cnmf` flag.
     """
 
-    st.header("📊 Module Heatmap with Column Annotations")
+    st.header("Step 3: Display Modules ")
 
     # --- Safety checks ---
     if module_usages is None:

@@ -6,6 +6,7 @@ from io import BytesIO
 
 def m_clustering(module_usages, sample_order, n_clusters_mod, cnmf=False):
 
+
     buf = BytesIO()
     module_usages.reset_index(drop=False).to_feather(buf)
     buf.seek(0)
@@ -30,6 +31,9 @@ def m_clustering(module_usages, sample_order, n_clusters_mod, cnmf=False):
         return None
 
     result = resp.json()
+
+    if n_clusters_mod == 0:
+        return BytesIO(bytes.fromhex(result["dendrogram_png"]))
 
     # Dynamic prefix selection
     prefix = "cnmf_" if cnmf else ""
