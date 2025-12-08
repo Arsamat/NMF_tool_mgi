@@ -398,7 +398,7 @@ if st.checkbox("Order by Top Samples"):
 
 # EXPRESSION MATRIX
 if st.checkbox("Show Gene Expression Matrix"):
-    heatmap = get_expression_heatmap(st.session_state["gene_loadings"])
+    heatmap = get_expression_heatmap(st.session_state["gene_loadings"], st.session_state.get("annotations_default"))
     if heatmap is not None:
         st.session_state["expression_heatmap"] = heatmap
 

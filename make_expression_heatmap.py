@@ -7,7 +7,7 @@ import pandas as pd
 if "expression_heatmap" not in st.session_state:
     st.session_state["expression_heatmap"] = None
 
-def get_expression_heatmap(gene_loadings_df):
+def get_expression_heatmap(gene_loadings_df, default_values):
 
     st.title("Gene Expression Heatmap")
 
@@ -28,7 +28,7 @@ def get_expression_heatmap(gene_loadings_df):
             "Select metadata fields for annotation bars",
             options=metadata_df.columns.tolist(),
             key="annotation_cols",
-            default=st.session_state["annotations_default"]
+            default=default_values
         )
 
         # ----------------------------------------------------------
