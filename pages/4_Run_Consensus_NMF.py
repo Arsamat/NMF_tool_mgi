@@ -305,7 +305,7 @@ if st.session_state.get("display_loadings", False):
 # PREVIEW HEATMAP (LOCAL)
 # ================================================================
 st.markdown("---")
-st.subheader("Preview Heatmap (Local Rendering)")
+st.subheader("Preview Heatmap")
 
 module_usages_T = st.session_state["cnmf_module_usages"].T
 
