@@ -9,7 +9,8 @@ def module_heatmap_ui(
         sample_order,
         module_leaf_order,
         module_cluster_labels,
-        cnmf=False
+        cnmf=False,
+        default_annotations=[]
 ):
     """
     One function with UI + backend call.
@@ -38,7 +39,7 @@ def module_heatmap_ui(
             "Select sample metadata to annotate:",
             options=meta.columns.tolist(),
             key=("cnmf_ann_cols" if cnmf else "nmf_ann_cols"),
-            default=st.session_state["annotations_default"]
+            default=default_annotations
         )
         submit_module_cluster = st.form_submit_button("Generate Annotated Heatmap")
 
