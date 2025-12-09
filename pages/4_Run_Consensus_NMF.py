@@ -222,7 +222,7 @@ if st.session_state["cnmf_running"]:
 
         if status == "success":
             st.session_state["cnmf_zip_bytes"] = payload
-            st.success("CNMF completed successfully!")
+            st.success("CNMF completed successfully! You can now visualize heatmaps")
         else:
             st.error(f"CNMF failed: {payload}")
 
@@ -462,7 +462,7 @@ if st.checkbox("Cluster Samples"):
     if st.checkbox("Cluster Modules"):
         st.subheader("Step 1 — Initial Module Dendrogram")
 
-        if st.button("Run Module Dendrogram (k=0)"):
+        if st.button("Run Module Dendrogram"):
             dendro_png = m_clustering(
                 st.session_state["cnmf_module_usages"],
                 st.session_state["cnmf_sample_order"],
@@ -497,7 +497,8 @@ if st.checkbox("Cluster Samples"):
             st.session_state["cnmf_sample_order"],
             st.session_state["cnmf_module_leaf_order"],
             st.session_state["cnmf_module_cluster_labels"],
-            cnmf=True
+            cnmf=True,
+            default_annotations=st.session_state["cnmf_annotations_default"]
         )
 
 

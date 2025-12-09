@@ -105,6 +105,7 @@ st.subheader("Run NMF algorithm")
 st.markdown("""
 Run NMF at your choice of k and generate a module usage heatmap.  
 Useful for early validation before consensus NMF.
+If the algorithm doesn not converge try increasing maximum iteration parameter, in some cases by 2x or 3x times
 """)
 
 k = st.number_input("k", 2, 50, 7)
@@ -153,6 +154,8 @@ if st.button("Run NMF"):
                         st.session_state["module_usages"] = pd.read_feather(z.open(name))
                     elif "_h" in name:
                         st.session_state["gene_loadings"] = pd.read_feather(z.open(name))
+            if r.status_code == 200:
+                st.success("NMF finished running. You can now visualize heatmaps")
 
         except Exception as e:
             st.error(f"Server error: {e}")
@@ -369,7 +372,8 @@ if st.checkbox("Hierarchically cluster samples"):
             st.session_state["sample_order"],
             st.session_state["module_leaf_order"],
             st.session_state["module_cluster_labels"],
-            cnmf=False
+            cnmf=False,
+            default_annotations=st.session_state["annotations_default"]
         )
 
 # ORDER BY TOP SAMPLES
