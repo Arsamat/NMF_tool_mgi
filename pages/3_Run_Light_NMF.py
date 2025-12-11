@@ -105,7 +105,7 @@ st.subheader("Run NMF algorithm")
 st.markdown("""
 Run NMF at your choice of k and generate a module usage heatmap.  
 Useful for early validation before consensus NMF.
-If the algorithm doesn not converge try increasing maximum iteration parameter, in some cases by 2x or 3x times
+If the algorithm does not converge try increasing maximum iteration parameter, in some cases by 2x or 3x times
 """)
 
 k = st.number_input("k", 2, 50, 7)
@@ -166,6 +166,7 @@ st.markdown("---")
 # DISPLAY RESULTS
 # -------------------------------------------------------------
 if st.session_state["gene_loadings"] is not None and st.session_state["module_usages"] is not None:
+    st.subheader("Review NMF Results")
 
     def toggle_display(key):
         st.session_state[key] = not st.session_state[key]
@@ -270,7 +271,6 @@ if st.checkbox("Hierarchically cluster samples"):
         
     if st.session_state["initial_sample_dendogram"]:
         st.image(st.session_state["initial_sample_dendogram"])
-
 
 
     st.subheader("Step 2: Run Run Hierarchical Clustering of Samples Broken Down Into Selected Number of Clusters")

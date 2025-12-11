@@ -175,7 +175,10 @@ st.dataframe(meta.head())
 # CNMF PARAMETERS
 # ================================================================
 k = st.number_input("k", 2, 50, 7)
-hvg = st.number_input("Number of highly variable genes", 100, 20000, 2000)
+if st.session_state["integer_format"]:
+    hvg = st.number_input("Number of highly variable genes", 100, 20000, 2000)
+else: 
+    hvg = 20000
 max_iter = st.number_input("Maximum number of iterations", 100, 30000, 8000)
 
 
@@ -269,7 +272,7 @@ st.subheader("Consensus NMF Results")
 # DISPLAY PDF FROM BACKEND
 # ================================================================
 if st.session_state["cnmf_pdf"] is not None:
-    st.write("**Backend-generated full heatmap PDF:**")
+    st.write("**Full heatmap PDF:**")
     st.download_button(
         "Download CNMF Heatmap PDF",
         data=st.session_state["cnmf_pdf"],
@@ -284,6 +287,7 @@ if st.session_state["cnmf_pdf"] is not None:
 def toggle(key):
     st.session_state[key] = not st.session_state[key]
 
+st.write("**Numeric Matrices Returned:**")
 
 if st.button("Show/Hide Module Usages"):
     toggle("display_scores")
