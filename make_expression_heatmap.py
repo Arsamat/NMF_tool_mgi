@@ -14,7 +14,7 @@ def get_expression_heatmap(gene_loadings_df, default_values):
     # ----------------------------------------------------------
     # Load local session state data
     # ----------------------------------------------------------
-    preprocessed_df_bytes = st.session_state["preprocessed_feather"]  # bytes
+    #preprocessed_df_bytes = st.session_state["preprocessed_feather"]  # bytes
     metadata_df = st.session_state["meta"]                        # pandas DataFrame
 
     metadata_index = st.session_state.get("metadata_index", metadata_df.columns[0])
@@ -65,13 +65,14 @@ def get_expression_heatmap(gene_loadings_df, default_values):
 
             files = {
                 "gene_loadings": ("gene_loadings.feather", gene_loadings_buf, "application/octet-stream"),
-                "preprocessed_df": ("preprocessed.feather", preprocessed_df_bytes, "application/octet-stream"),
+                #"preprocessed_df": ("preprocessed.feather", preprocessed_df_bytes, "application/octet-stream"),
                 "metadata": ("metadata.feather", metadata_buf, "application/octet-stream"),
             }
 
             data = {
                 "annotation_cols": json.dumps(annotation_cols),
                 "metadata_index": metadata_index,
+                "job_id": str(st.session_state["job_id"]),
                 "X": str(X),
             }
 

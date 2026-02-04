@@ -25,7 +25,7 @@ def hypergeom_ui(meta_bytes, module_usages, cluster_labels):
     selected_cols = st.multiselect(
         "Select metadata variables:",
         options=meta.columns.tolist(),
-        default=st.session_state["annotations_default"]
+        #default=st.session_state["annotations_default"]
     )
 
     # ---------------------------------------------------------
