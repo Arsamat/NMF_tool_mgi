@@ -67,11 +67,13 @@ def extract_data():
         authenticate()
     else:
         FASTAPI_URL = "http://18.218.84.81:8000/"
+        #FASTAPI_URL = "http://3.141.231.76:8000/"
 
         # Step 1 — Load metadata schema from backend
         st.subheader("**Required!** Step 1: Load Metadata Schema")
         if st.button("Load Schema"):
             st.session_state["schema"] = requests.get(f"{FASTAPI_URL}/get_metadata/").json()
+        
         
         if st.session_state["schema"] is not None: 
 
@@ -109,17 +111,20 @@ def extract_data():
                     f"{FASTAPI_URL}/get_samples",
                     json={"filters": filters}
                 )
-                zip_data = io.BytesIO(resp.content)
+                if resp.status_code == 204:
+                    st.warning("No matching samples were found.")
+                else:
+                    zip_data = io.BytesIO(resp.content)
 
-                with zipfile.ZipFile(zip_data, "r") as z:
-                    with z.open("counts") as f:
-                        st.session_state["counts_tmp"] = pd.read_feather(f)
-                    
-                    with z.open("metadata") as f:
-                        st.session_state["metadata_tmp"] = pd.read_feather(f)
-                    
-                    with z.open("job.json") as f:
-                        st.session_state["job_id_tmp"] = json.load(f)["job_id"]
+                    with zipfile.ZipFile(zip_data, "r") as z:
+                        with z.open("counts") as f:
+                            st.session_state["counts_tmp"] = pd.read_feather(f)
+                        
+                        with z.open("metadata") as f:
+                            st.session_state["metadata_tmp"] = pd.read_feather(f)
+                        
+                        with z.open("job.json") as f:
+                            st.session_state["job_id_tmp"] = json.load(f)["job_id"]
                 
                     
             
@@ -132,7 +137,6 @@ def extract_data():
                 
                 st.subheader("Short version Counts Table Preview:")
                 st.dataframe(st.session_state["counts_tmp"].head())
-                st.write(len(st.session_state["counts_tmp"].columns.to_list()))
 
                 csv_counts = convert_for_download(st.session_state["counts_tmp"])
 
@@ -157,8 +161,6 @@ def extract_data():
                     mime="text/csv",
                     icon=":material/download:",
                 )
-
-                st.write(sys.getsizeof(st.session_state["metadata_tmp"]))
 
 
                 st.subheader("Using downloaded data")
