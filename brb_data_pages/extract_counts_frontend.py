@@ -66,7 +66,7 @@ def extract_data():
     if not st.session_state["authenticated"]:
         authenticate()
     else:
-        FASTAPI_URL = "http://3.141.231.76:8000/"
+        FASTAPI_URL = "http://18.218.84.81:8000/"
 
         # Step 1 — Load metadata schema from backend
         st.subheader("**Required!** Step 1: Load Metadata Schema")
