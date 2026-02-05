@@ -1,58 +1,121 @@
 import streamlit as st
-import requests
-from streamlit_autorefresh import st_autorefresh
-
 from ui_theme import apply_custom_theme
+from brb_data_pages.extract_counts_frontend import extract_data
+from brb_data_pages.visualize_data import visualize_metadata
+
 apply_custom_theme()
 
+st.set_page_config(page_title="Analysis Suite", layout="wide")
+st.title("🔬 Bioinformatics Analysis Suite")
 
+# -------------------------------------------
+# TOP-LEVEL NAVIGATION
+# -------------------------------------------
+st.sidebar.title("Main Menu")
 
-# --- Session state ---
-st.session_state.setdefault("preprocessed_feather", None)
-st.session_state.setdefault("results", {})
-st.session_state.setdefault("spearman_img", None)
-st.session_state.setdefault("gene_column", None)
-st.session_state.setdefault("hvg", None)
-st.session_state.setdefault("metadata_index", None)
-st.session_state.setdefault("design_factor", None)
-st.session_state.setdefault("gene_symbols", None)
-st.session_state.setdefault("k_range", [])
-st.session_state.setdefault("max_iter", 0)
-st.session_state.setdefault("heatmap_pdf_bytes", [])
-st.session_state.setdefault("counts", None)
-st.session_state.setdefault("meta", None)
-# For Spearman plots
-st.session_state.setdefault("spearman_boxplot_png", None)
-st.session_state.setdefault("spearman_max_png", None)
-st.session_state.setdefault("pairs_by_k", {})
+if "_go_to_main" in st.session_state:
+        st.session_state["main_section"] = st.session_state["_go_to_main"]
+        del st.session_state["_go_to_main"]
 
-st.session_state.setdefault("API_URL", "")
-st.session_state.setdefault("LAMBDA_URL", "")
-st.session_state.setdefault("HEALTH_URL", "")
-
-
-#st.session_state["API_URL"] = "http://3.141.231.76:8000/"
-st.session_state["API_URL"] = "http://52.14.223.10:8000/"
-
-st.write("# Welcome to NMF exploration tool!")
-st.markdown("""
-Non-negative matrix factorization is a dimensionality reduction and feature extraction approach for non-negative data. 
-An input matrix **V** containing expression counts for **m transcripts x n samples** will be decomposed into **W (m x k)** and **H (k x n)**, such that **V ≈ WH**.
-
-**H** represents usage scores for the **n samples** for each of **k gene modules**, that is, how much each sample **'uses'** each gene module. This webtool will generate heatmap visualizations of **H**, which can serve as a global view of transcriptomic changes across your sample groups.
-
-**W** informs how much each of the **m transcripts** contribute to each of the **k gene modules**, which may be useful for your follow-up analyses. Every transcript will have a contribution score to each of the **k gene modules**, but the contribution scores may vary significantly across the modules.
-
-The choice of **k** must be provided to the algorithm. You have the option to manually iterate through different values of **k (tab 'Run Light NMF')**, and decide which value best captures global transcriptomic differences according to your experimental design.
-
-Alternatively, you can systematically iterate through different values of **k (tab 'Explore K Values')** and run a silhouette score analysis given your sample groupings, to identify a value of **k** that produces a matrix **H** that best reflects the experimental design.
-
-This method is not perfect and we encourage the user to manually inspect the heatmaps for matrix **H** at various **k within a range** of the **k** value identified by the **silhouette score** analysis before proceeding.
-
-Once an optimal value of **k** is determined, proceed to tab **'Run cNMF'**. Here you will be able to run **consensus NMF**, which repeats NMF at your chosen **k** many times with a different starting seed, and then generates the consensus result using the method developed by Kotliar et al. (link to https://elifesciences.org/articles/43803).
-
-You will be able to download the usage score heatmap for matrix **H**, the usage scores themselves, and the **gene spectra z-scores**, or how much each transcript contributes to each gene module.
-"""
+main_page = st.sidebar.radio(
+    "Select a section:",
+    ["Obtain Data", "NMF for Bulk RNA", "NMF for Single-Cell RNA", "DE Analysis"],
+    key="main_section"
 )
 
-st.page_link("pages/1_Metadata_Upload.py", label="Continue")
+# -------------------------------------------
+# If user selects NMF → load NMF subpages
+# -------------------------------------------
+if main_page == "NMF for Bulk RNA":
+    from nmf_nav.home import home_page
+    from nmf_nav.metadata_upload import run_metadata_upload
+    from nmf_nav.preprocess2_data import run_preprocess_data
+    from nmf_nav.explore_k_values import run_explore_k_values
+    from nmf_nav.run_light_nmf import run_nmf
+    from nmf_nav.run_consensus_nmf import run_cnmf
+    from nmf_nav.gene_descriptions import run_gene_loadings
+    from nmf_nav.explore_module_correlations import run_explore_correlations
+    from nmf_nav.pathway_analysis import run_pathway_analysis
+
+    if "_go_to" in st.session_state:
+        st.session_state["nmf_page"] = st.session_state["_go_to"]
+        del st.session_state["_go_to"]
+    
+    NMF_PAGES = {
+        "Home Page": home_page,
+        "Metadata Upload": run_metadata_upload,
+        "Preprocess Data for NMF": run_preprocess_data,
+        "Explore K Parameter": run_explore_k_values,
+        "Run NMF": run_nmf,
+        "Run cNMF": run_cnmf,
+        "Explore Gene Functions": run_gene_loadings,
+        "Spearman Correlation Analysis": run_explore_correlations,
+        "Pathview Analysis": run_pathway_analysis
+    }
+
+    nmf_subpage = st.sidebar.radio(
+        "NMF Tools:",
+        list(NMF_PAGES.keys()),
+        key="nmf_page"
+    )
+
+    # Show selected NMF subpage
+    NMF_PAGES[nmf_subpage]()
+
+elif main_page == "NMF for Single-Cell RNA":
+    from nmf_nav_sc.home_sc import home_page_sc
+    from nmf_nav_sc.cNMF_backup import run_cnmf_sc
+    from nmf_nav_sc.metadata_upload_sc import run_metadata_upload_sc
+    from nmf_nav_sc.run_cnmf_sc import run_cnmf_sc
+
+    if "_go_to" in st.session_state:
+        st.session_state["nmf_page_sc"] = st.session_state["_go_to"]
+        del st.session_state["_go_to"]
+    
+    NMF_PAGES_SC = {
+        "Home": home_page_sc,
+        "Upload Metadata": run_metadata_upload_sc,
+        "Run cNMF": run_cnmf_sc
+    }
+
+    nmf_subpage = st.sidebar.radio(
+        "NMF Tools:",
+        list(NMF_PAGES_SC.keys()),
+        key="nmf_page"
+    )
+
+    # Show selected NMF subpage
+    NMF_PAGES_SC[nmf_subpage]()
+     
+
+
+# -------------------------------------------
+# OTHER TOP-LEVEL SECTIONS
+# -------------------------------------------
+elif main_page == "Obtain Data":
+    from brb_data_pages.extract_counts_frontend import extract_data
+    from brb_data_pages.visualize_data import visualize_metadata
+    
+    if "_go_to_data_page" in st.session_state:
+        st.session_state["data_page"] = st.session_state["_go_to_data_page"]
+        del st.session_state["_go_to_data_page"]
+
+    DATA_PAGES = {
+         "Get Data": extract_data,
+         "Visualize Data": visualize_metadata
+    }
+
+    data_subpage = st.sidebar.radio(
+        "NMF Tools:",
+        list(DATA_PAGES.keys()),
+        key="data_page"
+    )
+
+    # Show selected NMF subpage
+    DATA_PAGES[data_subpage]()
+
+
+elif main_page == "DE Analysis":
+    st.header("🧪 Differential Expression Analysis")
+    st.write("DESeq2, edgeR, volcano plots, etc.")
+
