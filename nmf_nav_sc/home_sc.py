@@ -38,7 +38,6 @@ def home_page_sc():
     #st.session_state["API_URL_sc"] = "http://3.141.231.76:8000/"
     # st.session_state["API_URL_sc"] = "http://52.14.223.10:8000/"
 
-    st.write(st.session_state["API_URL_sc"])
     st.write("# Welcome to NMF exploration tool!")
     st.markdown("""
     Non-negative matrix factorization is a dimensionality reduction and feature extraction approach for non-negative data. 
