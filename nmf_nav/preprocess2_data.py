@@ -192,8 +192,6 @@ def run_preprocess_data():
 
     st.write("OR")
 
-    st.write(st.session_state["API_URL"])
-
     if not st.session_state["preprocessed_feather"]:
         # uploaded = st.file_uploader("Upload preprocessed matrix", type=["csv", "feather"])
         # if uploaded:
