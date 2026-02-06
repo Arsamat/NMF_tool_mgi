@@ -21,7 +21,7 @@ def run_gene_loadings():
 
 
     if "cnmf_gene_loadings" not in st.session_state and "gene_loadings" not in st.session_state:
-        st.subheader("Please run one of the NMF algorithms to obtain gene loadings data")
+        st.warning("Please run one of the NMF algorithms to obtain gene loadings data")
     else:
         if "cnmf_gene_loadings" in st.session_state and st.session_state["cnmf_gene_loadings"] is not None:
             df = st.session_state["cnmf_gene_loadings"]

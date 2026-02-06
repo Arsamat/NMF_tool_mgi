@@ -380,7 +380,7 @@ def run_cnmf_sc():
         if not common_samples:
             st.warning("No overlapping samples in module usages and metadata.")
         else:
-            module_bytes = cached_feather_bytes(np.log2(st.session_state["cnmf_module_usages_transposed_sc"] + 1))
+            module_bytes = cached_feather_bytes(st.session_state["cnmf_module_usages_transposed_sc"])
             meta_bytes = cached_feather_bytes(meta)
 
             files = {
@@ -410,7 +410,7 @@ def run_cnmf_sc():
     # ================================================================
     st.markdown("---")
     if st.checkbox("Cluster Samples"):
-        module_bytes = cached_feather_bytes(np.log2(st.session_state["cnmf_module_usages_sc"] + 1))
+        module_bytes = cached_feather_bytes(st.session_state["cnmf_module_usages_sc"])
         meta_bytes = cached_feather_bytes(meta)
 
         st.subheader("Step 1 — Run Dendrogram Without Clustering")
@@ -431,6 +431,13 @@ def run_cnmf_sc():
 
         if st.session_state["cnmf_initial_sample_dendogram_sc"] is not None:
             st.image(st.session_state["cnmf_initial_sample_dendogram_sc"])
+
+            st.download_button(
+            "Download PNG",
+            data=st.session_state["cnmf_initial_sample_dendogram_sc"],
+            file_name="cnmf_initial_sample_dendogram.png",
+            mime="image/png"
+            )
 
 
         st.subheader("Step 2 — Cluster Samples into Groups")
@@ -457,6 +464,15 @@ def run_cnmf_sc():
 
         if st.session_state["cnmf_sample_dendogram_sc"] is not None:
             st.image(st.session_state["cnmf_sample_dendogram_sc"])
+
+            st.download_button(
+                "Download PNG",
+                data=st.session_state["cnmf_sample_dendogram_sc"],
+                file_name="cnmf_sample_dendogram.png",
+                mime="image/png"
+            )
+
+            
 
             df_tmp = st.session_state["cnmf_module_usages_sc"]
             df_tmp = df_tmp.reset_index()
@@ -511,6 +527,13 @@ def run_cnmf_sc():
             if st.session_state["cnmf_sample_order_heatmap_sc"] is not None:
                 st.image(st.session_state["cnmf_sample_order_heatmap_sc"])
 
+                st.download_button(
+                    "Download PNG",
+                    data=st.session_state["cnmf_sample_order_heatmap_sc"],
+                    file_name="cnmf_sample_order_heatmap.png",
+                    mime="image/png"
+                )
+
 
         # ============================================================
         # Hypergeometric test
@@ -541,6 +564,13 @@ def run_cnmf_sc():
             if st.session_state["cnmf_initial_module_dendogram_sc"]:
                 st.image(st.session_state["cnmf_initial_module_dendogram_sc"])
 
+                st.download_button(
+                    "Download PNG",
+                    data=st.session_state["cnmf_initial_module_dendogram_sc"],
+                    file_name="cnmf_initial_module_dendogram.png",
+                    mime="image/png"
+                )
+
             st.subheader("Step 2 — Cluster Modules")
             n_mod = st.slider("Number of module clusters", 2, 12, 4)
 
@@ -556,6 +586,13 @@ def run_cnmf_sc():
 
             if st.session_state["cnmf_module_dendogram_sc"]:
                 st.image(st.session_state["cnmf_module_dendogram_sc"])
+
+                st.download_button(
+                    "Download PNG",
+                    data=st.session_state["cnmf_module_dendogram_sc"],
+                    file_name="cnmf_module_dendogram.png",
+                    mime="image/png"
+                )
 
             # Render heatmap using CNMF values
             module_heatmap_ui(
@@ -584,7 +621,7 @@ def run_cnmf_sc():
 
         if submit_top:
             files = {
-                "module_usages": ("modules.feather", cached_feather_bytes(np.log2(st.session_state["cnmf_module_usages_sc"] + 1)), "application/octet-stream"),
+                "module_usages": ("modules.feather", cached_feather_bytes(st.session_state["cnmf_module_usages_sc"]), "application/octet-stream"),
                 "metadata": ("meta.feather", cached_feather_bytes(meta), "application/octet-stream"),
             }
             data = {
@@ -602,6 +639,13 @@ def run_cnmf_sc():
         if st.session_state["cnmf_top_order_heatmap_sc"]:
             st.image(st.session_state["cnmf_top_order_heatmap_sc"])
 
+            st.download_button(
+                    "Download PNG",
+                    data=st.session_state["cnmf_top_order_heatmap_sc"],
+                    file_name="cnmf_top_order_heatmap.png",
+                    mime="image/png"
+                )
+
 
     # ================================================================
     # EXPRESSION HEATMAP
@@ -613,11 +657,18 @@ def run_cnmf_sc():
 
         if st.session_state["cnmf_expression_heatmap_sc"] is not None:
             st.image(st.session_state["cnmf_expression_heatmap_sc"])
+
+            st.download_button(
+                    "Download PNG",
+                    data=st.session_state["cnmf_expression_heatmap_sc"],
+                    file_name="cnmf_expression_heatmap.png",
+                    mime="image/png"
+                )
     # ============================================================================
     # END OF PAGE → NAVIGATION
     # ============================================================================
 
-    # if st.button("Continue"):
-    #     st.session_state["_go_to_sc"] = "Explore Gene Functions"
-    #     st.rerun()
+    if st.button("Continue"):
+        st.session_state["_go_to_sc"] = "Get Gene Descriptions"
+        st.rerun()
 

@@ -32,8 +32,8 @@ def home_page():
     st.session_state.setdefault("LAMBDA_URL", "")
     st.session_state.setdefault("HEALTH_URL", "")
 
-    st.session_state["API_URL"] = "http://18.218.84.81:8000/"
-    #st.session_state["API_URL"] = "http://3.141.231.76:8000/"
+    #st.session_state["API_URL"] = "http://18.218.84.81:8000/"
+    st.session_state["API_URL"] = "http://3.141.231.76:8000/"
     #st.session_state["API_URL"] = "http://52.14.223.10:8000/"
 
     st.write("# Welcome to NMF exploration tool!")

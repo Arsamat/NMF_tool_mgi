@@ -22,8 +22,8 @@ def run_preprocess_data():
         st.session_state["process_status"] = None
     if "result_queue" not in st.session_state:
         st.session_state["result_queue"] = queue.Queue()
-    if "API_URL" not in st.session_state:
-        st.session_state["API_URL"] = "http://52.14.223.10:8000/"
+    # if "API_URL" not in st.session_state:
+    #     st.session_state["API_URL"] = "http://52.14.223.10:8000/"
     if "integer_format" not in st.session_state:
         st.session_state["integer_format"] = False
     if "display_menu" not in st.session_state:
@@ -117,7 +117,7 @@ def run_preprocess_data():
             "batch_include": ",".join(st.session_state["batch_covars"]),
             "batch_column": st.session_state["batch_column"],
             "job_id": st.session_state["job_id"],
-            "single_cell": st.session_state["single_cell"]
+            "single_cell": False
         }
         elif "batch" in st.session_state and not st.session_state["batch"]:
             data = {
@@ -148,6 +148,8 @@ def run_preprocess_data():
             st.session_state["hvg"] = st.number_input("Number of High Variable Genes", value=2000, key="hvg_preproc")
 
             #st.session_state["gene_column"] = st.text_input("Column name of the gene IDs in your count file", placeholder="Unnamed: 0")
+           
+            
             st.session_state["gene_column"] = st.text_input("Type in name of the column that stores gene names")
             #st.session_state["single_cell"] = st.checkbox("Check if your data is single-cell data", key="single_cell_check", value=False)
             #st.write(st.session_state["single_cell"])
@@ -189,6 +191,8 @@ def run_preprocess_data():
         preprocess_window()
 
     st.write("OR")
+
+    st.write(st.session_state["API_URL"])
 
     if not st.session_state["preprocessed_feather"]:
         # uploaded = st.file_uploader("Upload preprocessed matrix", type=["csv", "feather"])
