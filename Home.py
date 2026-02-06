@@ -68,9 +68,9 @@ elif main_page == "NMF for Single-Cell RNA":
     from nmf_nav_sc.metadata_upload_sc import run_metadata_upload_sc
     from nmf_nav_sc.run_cnmf_sc import run_cnmf_sc
 
-    if "_go_to" in st.session_state:
-        st.session_state["nmf_page_sc"] = st.session_state["_go_to"]
-        del st.session_state["_go_to"]
+    if "_go_to_sc" in st.session_state:
+        st.session_state["nmf_page_sc"] = st.session_state["_go_to_sc"]
+        del st.session_state["_go_to_sc"]
     
     NMF_PAGES_SC = {
         "Home": home_page_sc,
