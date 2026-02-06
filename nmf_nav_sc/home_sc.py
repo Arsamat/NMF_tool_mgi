@@ -34,7 +34,7 @@ def home_page_sc():
     st.session_state.setdefault("LAMBDA_URL_sc", "")
     st.session_state.setdefault("HEALTH_URL_sc", "")
 
-    st.session_state["API_URL_sc"] = "http://18.218.84.81:8000/"
+    st.session_state["API_URL_sc"] = "https://18.218.84.81:8000/"
     #st.session_state["API_URL_sc"] = "http://3.141.231.76:8000/"
     # st.session_state["API_URL_sc"] = "http://52.14.223.10:8000/"
 
