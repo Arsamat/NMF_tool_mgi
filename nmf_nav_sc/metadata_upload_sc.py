@@ -101,7 +101,7 @@ def run_metadata_upload_sc():
 
     if st.session_state["metadata_index_sc"] is not None:
         if st.button("Continue"):
-            st.session_state["_go_to_sc"] = "Preprocess Data for NMF"
+            st.session_state["_go_to_sc"] = "Run cNMF"
             st.rerun()
 
 

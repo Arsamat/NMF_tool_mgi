@@ -34,10 +34,11 @@ def home_page_sc():
     st.session_state.setdefault("LAMBDA_URL_sc", "")
     st.session_state.setdefault("HEALTH_URL_sc", "")
 
-    st.session_state["API_URL_sc"] = "https://18.218.84.81:8000/"
+    st.session_state["API_URL_sc"] = "http://18.218.84.81:8000/"
     #st.session_state["API_URL_sc"] = "http://3.141.231.76:8000/"
     # st.session_state["API_URL_sc"] = "http://52.14.223.10:8000/"
 
+    st.write(st.session_state["API_URL_sc"])
     st.write("# Welcome to NMF exploration tool!")
     st.markdown("""
     Non-negative matrix factorization is a dimensionality reduction and feature extraction approach for non-negative data. 
@@ -60,7 +61,7 @@ def home_page_sc():
     )
 
     if st.button("Continue"):
-        st.session_state["_go_to_sc"] = "Metadata Upload"
+        st.session_state["_go_to_sc"] = "Upload Metadata"
         st.rerun()
 
 

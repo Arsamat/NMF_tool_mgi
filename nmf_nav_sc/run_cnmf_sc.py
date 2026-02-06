@@ -15,7 +15,7 @@ from module_heatmap import module_heatmap_ui
 from make_expression_heatmap import get_expression_heatmap
 from hypergeometric import hypergeom_ui
 from streamlit_autorefresh import st_autorefresh
-from .upload_counts_helper_sc import upload_counts, upload_preprocessed_counts
+from .upload_counts_helper_sc import upload_counts
 
 
 def run_cnmf_sc():
@@ -458,6 +458,18 @@ def run_cnmf_sc():
         if st.session_state["cnmf_sample_dendogram_sc"] is not None:
             st.image(st.session_state["cnmf_sample_dendogram_sc"])
 
+            df_tmp = st.session_state["cnmf_module_usages_sc"]
+            df_tmp = df_tmp.reset_index()
+            df_tmp.columns = ["Sample"] + list(df_tmp.columns[1:])
+            df_tmp = df_tmp.set_index("Sample")
+
+            # Compute sample order from leaf indices
+            sample_order = df_tmp.index.tolist()
+            meta_aligned = meta.set_index(metadata_index).loc[sample_order]
+            meta_aligned["H_Clustering_Labels"] = st.session_state["cnmf_sample_cluster_labels_sc"]
+            st.dataframe(meta_aligned)
+            
+
 
         # ============================================================
         # ANNOTATED HEATMAP
@@ -605,7 +617,7 @@ def run_cnmf_sc():
     # END OF PAGE → NAVIGATION
     # ============================================================================
 
-    if st.button("Continue"):
-        st.session_state["_go_to_sc"] = "Explore Gene Functions"
-        st.rerun()
+    # if st.button("Continue"):
+    #     st.session_state["_go_to_sc"] = "Explore Gene Functions"
+    #     st.rerun()
 
