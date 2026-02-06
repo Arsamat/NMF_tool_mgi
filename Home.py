@@ -64,7 +64,6 @@ if main_page == "NMF for Bulk RNA":
 
 elif main_page == "NMF for Single-Cell RNA":
     from nmf_nav_sc.home_sc import home_page_sc
-    from cNMF_backup import run_cnmf_sc
     from nmf_nav_sc.metadata_upload_sc import run_metadata_upload_sc
     from nmf_nav_sc.run_cnmf_sc import run_cnmf_sc
     from nmf_nav_sc.gene_descriptions_sc import run_gene_loadings_sc
