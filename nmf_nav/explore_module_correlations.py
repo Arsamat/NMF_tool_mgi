@@ -92,6 +92,6 @@ def run_explore_correlations():
             mime="image/png"
         )
 
-    if st.button("Continue"):
-            st.session_state["_go_to"] = "Pathview Analysis"
-            st.rerun()
+    # if st.button("Continue"):
+    #         st.session_state["_go_to"] = "Pathview Analysis"
+    #         st.rerun()
