@@ -142,6 +142,7 @@ def run_preprocess_data():
             st.write("Your counts data was already uploaded. Choose from parameters below and submit for pre-processing")
             if st.button("Remove current counts data"):
                 st.session_state["job_id"] = None
+                st.session_state["brb_data"] = None
                 st.rerun()
 
         if "job_id" in st.session_state:
@@ -149,8 +150,9 @@ def run_preprocess_data():
 
             #st.session_state["gene_column"] = st.text_input("Column name of the gene IDs in your count file", placeholder="Unnamed: 0")
            
-            
-            st.session_state["gene_column"] = st.text_input("Type in name of the column that stores gene names")
+            if "brb_data" not in st.session_state or not st.session_state["brb_data"]:
+                st.session_state["gene_column"] = st.text_input("Type in name of the column that stores gene names")
+
             #st.session_state["single_cell"] = st.checkbox("Check if your data is single-cell data", key="single_cell_check", value=False)
             #st.write(st.session_state["single_cell"])
             st.session_state["batch"] = st.checkbox("Check the box if you would like to run batch correction", value=False)
@@ -256,12 +258,12 @@ def run_preprocess_data():
         job_id = st.session_state["job_id"]
         api = st.session_state["API_URL"].rstrip("/")
 
-        download_endpoint = f"{api}/download_preprocessed_data?job_id={urllib.parse.quote(job_id)}"
+        download_endpoint = f"{api}/download_preprocessed_data?job_id={urllib.parse.quote(job_id)}&data_type=preprocessed"
 
         st.link_button("Download Full Preprocessed Data", download_endpoint)
     
-    st.markdown("---")
+        st.markdown("---")
 
-    if st.button("Continue"):
-        st.session_state["_go_to"] = "Explore K Parameter"
-        st.rerun()
+        if st.button("Continue"):
+            st.session_state["_go_to"] = "Explore K Parameter"
+            st.rerun()

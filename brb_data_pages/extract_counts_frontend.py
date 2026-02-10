@@ -5,7 +5,9 @@ import io
 import zipfile
 import json
 import time
+import urllib
 from streamlit_autorefresh import st_autorefresh
+from .visualize_data import visualize_metadata
 
 def authenticate():
     # placeholders variables for UI 
@@ -67,12 +69,13 @@ def extract_data():
     else:
         FASTAPI_URL = "http://18.218.84.81:8000/"
         #FASTAPI_URL = "http://3.141.231.76:8000/"
-        st.session_state["LAMBDA_URL"] = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"   # Function URL or API GW route               # EC2 FastAPI base
-
+        #st.session_state["LAMBDA_URL"] = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"   # Function URL or API GW route               # EC2 FastAPI base
+        st.session_state["LAMBDA_URL"] = "xxx"
         HEALTH_URL = FASTAPI_URL + "healthz"
         #---- session flags ----
         st.session_state.setdefault("ec2_start_triggered", False)
         st.session_state.setdefault("fastapi_ready", False)
+        st.session_state.setdefault("visualize_data", False)
 
         def check_health():
             try:
@@ -106,8 +109,7 @@ def extract_data():
             # Step 1 — Load metadata schema from backend
             st.subheader("Step 1: Load Metadata Schema")
             if st.button("Load Schema"):
-                st.session_state["schema"] = requests.get(f"{FASTAPI_URL}/get_metadata/").json()
-            
+                st.session_state["schema"] = requests.get(f"{FASTAPI_URL}/get_metadata/").json()            
             
             if st.session_state["schema"] is not None: 
                 schema = st.session_state["schema"]
@@ -137,7 +139,6 @@ def extract_data():
                     if vals:
                         filters[col] = vals
                 
-
                 # Step 5 — Query backend for sample names
                 if st.button("Find Matching Samples"):
                     resp = requests.post(
@@ -147,40 +148,40 @@ def extract_data():
                     if resp.status_code == 204:
                         st.warning("No matching samples were found.")
                     else:
-                        zip_data = io.BytesIO(resp.content)
+                        buf = io.BytesIO(resp.content)
+                        st.session_state["metadata_tmp"] = pd.read_feather(buf)
+                        st.session_state["counts_tmp"] = None
+                        # zip_data = io.BytesIO(resp.content)
 
-                        with zipfile.ZipFile(zip_data, "r") as z:
-                            with z.open("counts") as f:
-                                st.session_state["counts_tmp"] = pd.read_feather(f)
+                        # with zipfile.ZipFile(zip_data, "r") as z:
+                        #     # with z.open("counts") as f:
+                        #     #     st.session_state["counts_tmp"] = pd.read_feather(f)
                             
-                            with z.open("metadata") as f:
-                                st.session_state["metadata_tmp"] = pd.read_feather(f)
+                        #     with z.open("metadata") as f:
+                        #         st.session_state["metadata_tmp"] = pd.read_feather(f)
                             
-                            with z.open("job.json") as f:
-                                st.session_state["job_id_tmp"] = json.load(f)["job_id"]
+                        #     with z.open("job.json") as f:
+                        #         st.session_state["job_id_tmp"] = json.load(f)["job_id"]
                     
                         
                 
-                if st.session_state["counts_tmp"] is not None and st.session_state["metadata_tmp"] is not None:
+                if st.session_state["metadata_tmp"] is not None:
 
                     @st.cache_data
                     def convert_for_download(df):
                         return df.to_csv().encode("utf-8")
 
-                    
-                    st.subheader("Short version Counts Table Preview:")
-                    st.dataframe(st.session_state["counts_tmp"].head())
+                    # st.subheader("Short version Counts Table Preview:")
+                    # st.dataframe(st.session_state["counts_tmp"].head())
+                    # csv_counts = convert_for_download(st.session_state["counts_tmp"])
 
-                    csv_counts = convert_for_download(st.session_state["counts_tmp"])
-
-                    st.download_button(
-                        label="Download Full Counts CSV",
-                        data=csv_counts,
-                        file_name="counts_table_brb.csv",
-                        mime="text/csv",
-                        icon=":material/download:",
-                    )
-
+                    # st.download_button(
+                    #     label="Download Full Counts CSV",
+                    #     data=csv_counts,
+                    #     file_name="counts_table_brb.csv",
+                    #     mime="text/csv",
+                    #     icon=":material/download:",
+                    # )
 
                     st.subheader("Short version Metadata Table Preview:")
                     st.dataframe(st.session_state["metadata_tmp"].head())
@@ -194,25 +195,72 @@ def extract_data():
                         mime="text/csv",
                         icon=":material/download:",
                     )
+                    if st.button("Visualize Data"):
+                        st.session_state["visualize_data"] = True
 
+                    if st.session_state["visualize_data"]:
+                        if st.button("Close"):
+                            st.session_state["visualize_data"] = False
+                            st_autorefresh()
+                        visualize_metadata()
 
-                    st.subheader("Using downloaded data")
-                    st.markdown("You can use downloaded data inside the NMF tool. Just click Save data button and then move to the NMF tool."
-                        "Downloaded data will be populated where required, so just follow the steps described in the tool.")
+                    # st.subheader("Using downloaded data")
+                    # st.markdown("You can use downloaded data inside the NMF tool. Just click Save data button and then move to the NMF tool."
+                    #     "Downloaded data will be populated where required, so just follow the steps described in the tool.")
                     
-                    if st.button("Save Data for NMF Tool"):
-                        #if counts is not None and metadata is not None:
+                    # if st.button("Save Data for NMF Tool"):
+                    #     #if counts is not None and metadata is not None:
 
-                        #st.session_state["counts"] = st.session_state["counts_tmp"]
-                        st.session_state["meta"] = st.session_state["metadata_tmp"]
-                        st.session_state["job_id"] = st.session_state["job_id_tmp"]
-                        st.session_state["saved_for_nmf"] = True
-                        st.session_state["gene_column"] = "Unnamed: 0"
-                        st.success("Data Saved")
-                        
+                    #     #st.session_state["counts"] = st.session_state["counts_tmp"]
+                    #     st.session_state["meta"] = st.session_state["metadata_tmp"]
+                    #     st.session_state["job_id"] = st.session_state["job_id_tmp"]
+                    #     st.session_state["saved_for_nmf"] = True
+                    #     st.session_state["gene_column"] = "Unnamed: 0"
+                    #     st.success("Data Saved")
+                    
+                    if st.button("Load Counts Table"):
+                        buf = io.BytesIO()
+                        st.session_state["metadata_tmp"].to_feather(buf)
+                        buf.seek(0)
 
-                    if st.session_state["saved_for_nmf"]:
+                        resp = requests.post(
+                            f"{FASTAPI_URL}/get_counts",
+                            files={
+                                "metadata": ("counts.feather", buf, "application/octet-stream")
+                            }
+                        )
+                        if resp.status_code == 204:
+                            st.warning("Could not obtain counts data.")
+                        else:
+                            zip_data = io.BytesIO(resp.content)
+
+                            with zipfile.ZipFile(zip_data, "r") as z:
+                                with z.open("counts") as f:
+                                    st.session_state["counts_tmp"] = pd.read_feather(f)
+                                
+                                with z.open("job.json") as f:
+                                    st.session_state["job_id_tmp"] = json.load(f)["job_id"]
+                    
+                    if st.session_state["counts_tmp"] is not None:
+                        st.subheader("Counts Table Short Version Preview:")
+                        st.dataframe(st.session_state["counts_tmp"])
+
+                        api = st.session_state["API_URL"].rstrip("/")
+                        job_id = st.session_state["job_id_tmp"]
+
+                        download_endpoint = f"{api}/download_preprocessed_data?job_id={urllib.parse.quote(job_id)}&data_type=counts"
+
+                        st.link_button("Download Full Loaded Counts Table", download_endpoint)
+
+                    
                         if st.button("Move to NMF Tool"):
+                            st.session_state["job_id"] = st.session_state["job_id_tmp"]
+                            st.session_state["meta"] = st.session_state["metadata_tmp"]
+                            st.session_state["metadata_index"] = "SampleName"
+                            st.session_state["design_factor"] = "Group"
+                            st.session_state["brb_data"] = True
+                            st.session_state["gene_column"] = "Unnamed: 0"
+
                             st.session_state["_go_to_main"] = "NMF for Bulk RNA"
                             st.rerun()
     

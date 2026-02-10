@@ -95,15 +95,15 @@ elif main_page == "NMF for Single-Cell RNA":
 # -------------------------------------------
 elif main_page == "Obtain Data":
     from brb_data_pages.extract_counts_frontend import extract_data
-    from brb_data_pages.visualize_data import visualize_metadata
+    #from brb_data_pages.visualize_data import visualize_metadata
     
     if "_go_to_data_page" in st.session_state:
         st.session_state["data_page"] = st.session_state["_go_to_data_page"]
         del st.session_state["_go_to_data_page"]
 
     DATA_PAGES = {
-         "Get Data": extract_data,
-         "Visualize Data": visualize_metadata
+        "Get Data": extract_data,
+        # "Visualize Data": visualize_metadata
     }
 
     data_subpage = st.sidebar.radio(
