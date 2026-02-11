@@ -60,6 +60,8 @@ def run_cnmf_sc():
         "display_scores_sc": None,
         "display_loadings_sc": None
     }
+    if "API_URL_sc" not in st.session_state:
+        st.session_state["API_URL_sc"] = st.session_state["API_URL_sc"] = "http://18.218.84.81:8000/"
 
     # Initialize missing keys
     for k, v in DEFAULTS.items():
