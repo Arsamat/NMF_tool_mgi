@@ -19,7 +19,7 @@ if "_go_to_main" in st.session_state:
 
 main_page = st.sidebar.radio(
     "Select a section:",
-    ["NMF for Bulk RNA", "NMF for Single-Cell RNA", "DE Analysis", "Obtain Data"],
+    ["NMF for Bulk RNA", "NMF for Single-Cell RNA", "DE Analysis", "Obtain Data", "Feedback Form"],
     key="main_section"
 )
 
@@ -119,4 +119,8 @@ elif main_page == "Obtain Data":
 elif main_page == "DE Analysis":
     st.header("🧪 Differential Expression Analysis")
     st.write("DESeq2, edgeR, volcano plots, etc.")
+
+elif main_page == "Feedback Form":
+    st.write("If you experienced an error or would like to provide feedback, you can access the form by clicking the button below")
+    st.link_button("Provide Feedback", "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=taPMTM1xbU6XS02b65bG1gY_uBy6G5ZIhg2MdbY5agRUODZHVklVVVhHRUZVMjZCVzNZVDY5UUxINS4u")
 
