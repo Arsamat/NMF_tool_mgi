@@ -70,6 +70,7 @@ def extract_data():
         FASTAPI_URL = "http://18.218.84.81:8000/"
         #FASTAPI_URL = "http://3.141.231.76:8000/"
         st.session_state["LAMBDA_URL"] = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"   # Function URL or API GW route               # EC2 FastAPI base
+        st.session_state["API_URL"] = FASTAPI_URL
         #st.session_state["LAMBDA_URL"] = "xxx"
         HEALTH_URL = FASTAPI_URL + "healthz"
         #---- session flags ----
