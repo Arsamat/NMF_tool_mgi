@@ -8,7 +8,9 @@ def spearman_pairs_from_H(df_h: pd.DataFrame, use_abs: bool = False):
     Return a list[dict] of pairwise Spearman correlations between modules for one k.
     df_h: rows=modules, cols=genes (NMF H)
     """
-    corr = df_h.T.corr(method="spearman")  # modules x modules
+    if "Module" in df_h.columns:
+        df_h = df_h.set_index("Module")
+    corr = df_h.T.corr(method="spearman")
     mods = list(corr.index)
     rows = []
     # upper triangle only (i<j)
@@ -53,36 +55,13 @@ def spearman_values_from_H(df_h: pd.DataFrame, use_abs: bool = False) -> np.ndar
     return vals
 
 def run_spearman(
-    df_expr: pd.DataFrame,
-    k,
-    design_factor: str,
+    df_H: pd.DataFrame,
 ):
-    """
-    Loops k in [k_min, k_max], runs NMF -> H, computes Spearman correlations,
-    returns:
-      - max_map: {k: max correlation}
-      - corr_by_k: {k: [all off-diagonal correlations]}
-    """
-   # max_map: dict[int, float] = {}
-   # corr_by_k: dict[int, list[float]] = {}
-
-    pairs_by_k = {}
-    max_iter = 5000
-
     
-    df_H, _ = do_NMF(
-        n_components=k,
-        max_iter=max_iter,
-        design_factor=design_factor,
-        df_expr=df_expr
-    )
-
-    #vals = spearman_values_from_H(df_H)   # np.ndarray
-    #corr_by_k[k] = [float(x) for x in vals]                # JSON-safe
-    #max_map[k] = float(np.max(vals)) if vals.size else float("nan")
+    pairs_by_k = {}
 
     pairs = spearman_pairs_from_H(df_H)
-    pairs_by_k[k] = pairs
+    pairs_by_k["result"] = pairs
 
     return pairs_by_k
 

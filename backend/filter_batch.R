@@ -26,9 +26,9 @@ count_sep <- get_sep(count_data_file)
 meta_sep  <- get_sep(sample_metadata_file)
 
 # LOAD DATA ###################################################
-count_data <- read.delim(count_data_file, sep = count_sep, header = TRUE, stringsAsFactors = FALSE)
+count_data <- read.delim(count_data_file, sep = count_sep, header = TRUE, stringsAsFactors = FALSE, check.names=FALSE)
 
-print(colnames(count_data))
+#print(colnames(count_data))
 # Assume first column is gene IDs
 gene_ids <- count_data[,1]
 gene_ids <- make.unique(as.character(gene_ids))
@@ -36,7 +36,7 @@ rownames(count_data) <- gene_ids
 count_data <- count_data[,-1]
 
 # Load metadata
-sample_data <- read.delim(sample_metadata_file, sep = meta_sep, header = TRUE, stringsAsFactors = FALSE)
+sample_data <- read.delim(sample_metadata_file, sep = meta_sep, header = TRUE, stringsAsFactors = FALSE, check.names=FALSE)
 
 # Set the row names of metadata to the chosen index column
 if (!(meta_index_col %in% colnames(sample_data))) {
@@ -47,6 +47,8 @@ sample_data[[meta_index_col]] <- NULL  # drop index col now redundant
 
 # Sort both to align
 common_samples <- intersect(rownames(sample_data), colnames(count_data))
+print(rownames(sample_data)[1:20])
+print(colnames(count_data)[1:20])
 
 if (length(common_samples) == 0) {
   stop("FATAL ERROR: No matching sample IDs between metadata and count matrix.")
@@ -77,16 +79,17 @@ sample_data[[design_factor]] <- factor(sample_data[[design_factor]])
 
 # Build EdgeR object
 y <- DGEList(counts = count_data, samples = sample_data, group = sample_data[[design_factor]])
-
 # FILTER
 keep.exprs <- filterByExpr(y, group = y$samples[[design_factor]])
 x <- y[keep.exprs,, keep.lib.sizes = FALSE]
+
 
 # Normalize
 x <- calcNormFactors(x, method = "TMM")
 
 # TMM-normalized logCPM
 logCPM <- edgeR::cpm(x, log = TRUE, prior.count = 0.1, normalized.lib.sizes = TRUE)
+
 
 # ---------------------------
 # CONDITIONAL BATCH CORRECTION
@@ -117,8 +120,10 @@ if (batch) {
 gene_vars <- apply(lcpm_rbe, 1, var)
 ranked_idx <- order(gene_vars, decreasing = TRUE)
 
-H <- hvg
+#H <- hvg
+H <- min(hvg, nrow(lcpm_rbe))
 top_genes <- rownames(lcpm_rbe)[ranked_idx[1:H]]
+print(top_genes)
 
 lcpm_rbe_top <- lcpm_rbe[top_genes, ]
 

@@ -13,8 +13,6 @@ import numpy as np
 from sklearn.decomposition import NMF
 import seaborn as sns
 import matplotlib.pyplot as plt
-from pydeseq2.dds import DeseqDataSet
-from pydeseq2.ds import DeseqStats
 import scanpy as sc
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -28,36 +26,43 @@ import torch
 from sklearn.utils.extmath import randomized_svd
 import math
 import tempfile
+import pyarrow.parquet as pq
 
 
 #function to transform ensembl ids to symbol ids
-def transform_ids(df_link, gene_column):
-    dataset = Dataset(name='hsapiens_gene_ensembl',
-                      host='http://www.ensembl.org')
+def transform_ids(df_link, gene_column, symbols):
+    #dataset = Dataset(name='hsapiens_gene_ensembl',
+    #                 host='http://www.ensembl.org')
+    genes = pd.read_csv("./gene_maps.csv")
     delimiter = detect_delimiter(df_link)
+
 
     df = pd.read_csv(df_link, delimiter=delimiter)
     df = df.set_index(gene_column)
+    
+    if not symbols:
 
-    # Get Ensembl → symbol mapping
-    genes = dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
-    mapping = dict(zip(genes['Gene stable ID'], genes['Gene name']))
+        # Get Ensembl → symbol mapping
+        #genes = dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
+        mapping = dict(zip(genes['Gene stable ID'], genes['Gene name']))
 
-    seen = set()
-    result = []
-    for val in df.index:
-        mapped = mapping.get(val, val)
-        if not mapped or str(mapped).lower() == "nan":
-            mapped = val
-        if mapped in seen:  # avoid duplicates
-            mapped = val
-        seen.add(mapped)
-        result.append(mapped)
+        seen = set()
+        result = []
+        for val in df.index:
+            mapped = mapping.get(val, val)
+            if not mapped or str(mapped).lower() == "nan":
+                mapped = val
+            if mapped in seen:  # avoid duplicates
+                mapped = val
+            seen.add(mapped)
+            result.append(mapped)
+    else:
+        result = list(df.index)
 
-    df = df.copy()
-    df.insert(0, "Geneid", result)  # put Geneid first
     df.reset_index(drop=True, inplace=True)
     print(df.columns)
+    df.insert(0, "Geneid", result)  # put Geneid first
+    
     # Always save as CSV (overwrites input file path, regardless of extension)
     new_path = df_link.replace("txt", "csv")
     df.to_csv(new_path, sep=",", index=False)
@@ -87,10 +92,8 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
                           batch_column="",
                           batch_include=[]):
     
-    if not symbols:
-        counts, new_path = transform_ids(counts_link, gene_column)
+    counts, new_path = transform_ids(counts_link, gene_column, symbols)
     
-
     tmp_dir = tempfile.mkdtemp(prefix="preprocess_")
     out_dir = os.path.join(tmp_dir, "filtered_batched_counts.tsv")
 
@@ -145,7 +148,7 @@ def do_NMF(df_expr,
     init = "nndsvda"
     verbose=False
 
-    df_expr = np.log2(df_expr + 1)
+    #df_expr = np.log2(df_expr + 1)
     
     nmf_start = time.time()
 
