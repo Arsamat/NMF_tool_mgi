@@ -12,7 +12,10 @@ from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
 from utils.s3_utils import upload_brb
 
-MONGO_URI = "mongodb+srv://azamat_db_user:vHrxiXkYKKB1eTeh@mgi2025.k7zp0oy.mongodb.net/?appName=mgi2025"
+# Read from environment; never commit the actual URL
+MONGO_URI = os.environ.get("MONGODB_URI") or os.environ.get("MONGO_URI")
+if not MONGO_URI:
+    raise ValueError("Set MONGODB_URI (or MONGO_URI) in the environment")
 
 client = MongoClient(MONGO_URI)
 db = client["brb_seq"]

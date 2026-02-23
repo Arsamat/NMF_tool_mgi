@@ -1,0 +1,5 @@
+# Environment and secrets — never commit
+.env
+backend/.env
+*.pem
+.streamlit/secrets.toml
