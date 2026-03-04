@@ -173,10 +173,16 @@ if (length(genes_top30) > 0) {
     syms <- top_table[genes_top30, "SYMBOL"]
     ifelse(!is.na(syms) & syms != "NA", as.character(syms), genes_top30)
   } else genes_top30
+  # Hierarchical clustering on genes (rows): order so similar genes are adjacent
+  if (nrow(hm) >= 2) {
+    gene_dist <- dist(hm, method = "euclidean")
+    gene_hc <- hclust(gene_dist, method = "complete")
+    hm <- hm[gene_hc$order, , drop = FALSE]
+  }
   write.csv(hm, heatmap_matrix_path)
   anno <- data.frame(SampleName = colnames(x), Group = as.character(x$samples$Group))
   write.csv(anno, heatmap_annotation_path, row.names = FALSE)
-  cat("[DEG] Wrote top-30 (by variability) log2 CPM heatmap matrix and sample annotation.\n")
+  cat("[DEG] Wrote top-30 (by variability) log2 CPM heatmap matrix (genes clustered) and sample annotation.\n")
 }
 
 # --- GSEA (Hallmark) ---

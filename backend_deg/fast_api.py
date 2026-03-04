@@ -27,6 +27,7 @@ from utils.nmf_utils import run_regular_nmf_util, run_cnmf_utils, cleanup_after_
 from utils.extra_utils import gpt_utils
 from utils.s3_utils import create_url, create_preprocessed_url, download_data_util
 from utils.deg_utils import run_deg_analysis
+from research_pipeline import ResearchPipeline
 from fastapi import Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -493,6 +494,17 @@ class DEGGroupsRequest(BaseModel):
     group_b: list[str]
 
 
+class DEGGroupsRequest(BaseModel):
+    group_a: list[str]
+    group_b: list[str]
+
+
+class DEGResearchRequest(BaseModel):
+    disease_context: str = "Unknown"
+    tissue: str = "Unknown"
+    num_genes: int = 10
+
+
 @app.post("/deg_submit_groups/")
 async def deg_submit_groups(payload: DEGGroupsRequest):
     """
@@ -512,6 +524,112 @@ async def deg_submit_groups(payload: DEGGroupsRequest):
         return JSONResponse(
             status_code=500,
             content={"detail": str(e), "status": "error"},
+        )
+
+
+@app.post("/deg_with_research/")
+async def deg_with_research(
+    deg_table: UploadFile = File(...),
+    disease_context: str = Form("Unknown"),
+    tissue: str = Form("Unknown"),
+    num_genes: int = Form(10)
+):
+    """
+    Generate research insights from pre-computed DEG results.
+
+    Takes an already-computed DEG results table and generates:
+    - Biological context for top genes
+    - Disease association predictions
+    - Drug response predictions
+    - Research hypotheses
+
+    All computation on EC2. Returns JSON with all results.
+
+    Args:
+        deg_table: CSV file with DEG results (must include: gene, log2fc, padj columns)
+        disease_context: Disease/condition being studied (optional)
+        tissue: Tissue type (optional)
+        num_genes: Number of top genes to analyze for predictions (default 10)
+
+    Returns:
+        JSON with DEG results, biological context, and research insights
+    """
+    try:
+        print(f"Starting research insights pipeline...")
+        print(f"  Disease: {disease_context}")
+        print(f"  Tissue: {tissue}")
+        print(f"  Top genes to analyze: {num_genes}")
+
+        # Read DEG table from uploaded file
+        deg_bytes = await deg_table.read()
+        deg_df = pd.read_csv(io.BytesIO(deg_bytes))
+
+        print(f"Loaded DEG table: {deg_df.shape}")
+        print(f"Columns: {list(deg_df.columns)}")
+
+        # Validate and map required columns
+        # Define column aliases for each required field
+        col_aliases = {
+            "gene": ["gene", "Gene", "GENE", "SYMBOL", "ENSEMBLID", "ensemblid"],
+            "log2fc": ["log2fc", "logFC", "log2FC", "Log2FC", "log2FoldChange", "logFoldChange"],
+            "padj": ["padj", "adj.P.Val", "adjustedPvalue", "adjusted_pvalue", "p.adjust"]
+        }
+
+        available_cols = set(deg_df.columns)
+        col_mapping = {}
+
+        # Find matching columns for each required field
+        for req_col, aliases in col_aliases.items():
+            found = False
+            for alias in aliases:
+                if alias in available_cols:
+                    col_mapping[alias] = req_col
+                    found = True
+                    break
+            if not found:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "detail": f"Missing required column for '{req_col}'. Expected one of: {aliases}. Available columns: {list(available_cols)}"
+                    },
+                )
+
+        # Rename columns to standard names if needed
+        if col_mapping:
+            deg_df = deg_df.rename(columns=col_mapping)
+
+        # Initialize research pipeline
+        pipeline = ResearchPipeline()
+
+        # Run full analysis (skips DEG analysis, goes straight to insights)
+        results = pipeline.full_analysis(
+            deg_df=deg_df,
+            disease_context=disease_context,
+            tissue=tissue,
+            num_genes=num_genes
+        )
+
+        print(f"Analysis complete. Total genes analyzed: {results.get('total_genes', 0)}")
+
+        return JSONResponse(
+            status_code=200,
+            content=results
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error in /deg_with_research: {error_msg}")
+        import traceback
+        traceback.print_exc()
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "detail": error_msg,
+                "error_type": type(e).__name__
+            },
         )
 
 
