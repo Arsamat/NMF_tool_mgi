@@ -117,8 +117,8 @@ elif main_page == "Obtain Data":
 
 
 elif main_page == "DE Analysis":
-    st.header("🧪 Differential Expression Analysis")
-    st.write("DESeq2, edgeR, volcano plots, etc.")
+    from deg.group_selection import run_group_selection
+    run_group_selection()
 
 elif main_page == "Feedback Form":
     st.write("If you experienced an error or would like to provide feedback, you can access the form by clicking the button below")
