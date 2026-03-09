@@ -48,7 +48,8 @@ def natural_language_to_filters(user_description: str, metadata_schema: dict) ->
     """
     import os
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    #api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = st.secrets["ANTHROPIC_API_KEY"]
     if not api_key:
         st.error("ANTHROPIC_API_KEY not set. Natural language filtering unavailable.")
         return {}
@@ -130,9 +131,9 @@ def run_group_selection():
     ensure_ec2_wake_session(DEG_API_URL, DEG_LAMBDA_URL)
     if not st.session_state.get("deg_ec2_start_triggered"):
         start_ec2_once()
-    check_health(DEG_API_URL.rstrip("/") + "/healthz")
-    if not st.session_state.get("deg_fastapi_ready"):
+    if not st.session_state.get("deg_fastapi_ready", "False"):
         st.info("Waking up the compute node… this usually takes 1–4 minutes. Please wait until it is ready to proceed.")
+        check_health(DEG_API_URL.rstrip("/") + "/healthz")
         st_autorefresh(interval=8000, key="deg_wake_refresh")
         return
     st.success("Compute node is ready.")

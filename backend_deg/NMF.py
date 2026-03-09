@@ -60,7 +60,6 @@ def transform_ids(df_link, gene_column, symbols):
         result = list(df.index)
 
     df.reset_index(drop=True, inplace=True)
-    print(df.columns)
     df.insert(0, "Geneid", result)  # put Geneid first
     
     # Always save as CSV (overwrites input file path, regardless of extension)

@@ -26,6 +26,8 @@ from utils.db_utils import get_all_metadata_values, query_counts, query_metadata
 from utils.nmf_utils import run_regular_nmf_util, run_cnmf_utils, cleanup_after_send, preprocess_util, explore_k_utils, single_cell_util
 from utils.extra_utils import gpt_utils
 from utils.s3_utils import create_url, create_preprocessed_url, download_data_util
+from utils.deg_utils import run_deg_analysis
+from research_pipeline import ResearchPipeline
 from fastapi import Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,14 +76,13 @@ def global_exception_handler(request: Request, exc: Exception):
     # Call OpenAI synchronously to summarize
     summary = summarize_traceback(tb)
 
-    # Return structured JSON response (include raw exception for debugging)
+    # Return structured JSON response
     return JSONResponse(
         status_code=500,
         content={
             "error_id": error_id,
             "message": summary,
             "details": "This issue has been logged for review.",
-            "raw_error": str(exc),
         },
     )
 
@@ -487,6 +488,138 @@ async def get_sample_counts(request: Request):
 
     return result
 
+
+class DEGGroupsRequest(BaseModel):
+    group_a: list[str]
+    group_b: list[str]
+
+
+class DEGResearchRequest(BaseModel):
+    disease_context: str = "Unknown"
+    tissue: str = "Unknown"
+    num_genes: int = 10
+
+
+@app.post("/deg_submit_groups/")
+async def deg_submit_groups(payload: DEGGroupsRequest):
+    """
+    Accept group_a and group_b sample lists, run DEG analysis (limma/voom),
+    and return the DEG results table.
+    """
+    group_a = payload.group_a or []
+    group_b = payload.group_b or []
+    if not group_a or not group_b:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Both group_a and group_b must contain at least one sample."},
+        )
+    try:
+        return run_deg_analysis(group_a, group_b)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e), "status": "error"},
+        )
+
+
+@app.post("/deg_with_research/")
+async def deg_with_research(
+    deg_table: UploadFile = File(...),
+    disease_context: str = Form("Unknown"),
+    tissue: str = Form("Unknown"),
+    num_genes: int = Form(10)
+):
+    """
+    Generate research insights from pre-computed DEG results.
+
+    Takes an already-computed DEG results table and generates:
+    - Biological context for top genes
+    - Disease association predictions
+    - Drug response predictions
+    - Research hypotheses
+
+    All computation on EC2. Returns JSON with all results.
+
+    Args:
+        deg_table: CSV file with DEG results (must include: gene, log2fc, padj columns)
+        disease_context: Disease/condition being studied (optional)
+        tissue: Tissue type (optional)
+        num_genes: Number of top genes to analyze for predictions (default 10)
+
+    Returns:
+        JSON with DEG results, biological context, and research insights
+    """
+    try:
+        print(f"Starting research insights pipeline...")
+        print(f"  Disease: {disease_context}")
+        print(f"  Tissue: {tissue}")
+        print(f"  Top genes to analyze: {num_genes}")
+
+        # Read DEG table from uploaded file
+        deg_bytes = await deg_table.read()
+        deg_df = pd.read_csv(io.BytesIO(deg_bytes))
+
+        print(f"Loaded DEG table: {deg_df.shape}")
+        print(f"Columns: {list(deg_df.columns)}")
+
+        # Validate and map required columns
+        col_aliases = {
+            "gene": ["gene", "Gene", "GENE", "SYMBOL", "ENSEMBLID", "ensemblid"],
+            "log2fc": ["log2fc", "logFC", "log2FC", "Log2FC", "log2FoldChange", "logFoldChange"],
+            "padj": ["padj", "adj.P.Val", "adjustedPvalue", "adjusted_pvalue", "p.adjust"]
+        }
+
+        available_cols = set(deg_df.columns)
+        col_mapping = {}
+
+        for req_col, aliases in col_aliases.items():
+            found = False
+            for alias in aliases:
+                if alias in available_cols:
+                    col_mapping[alias] = req_col
+                    found = True
+                    break
+            if not found:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "detail": f"Missing required column for '{req_col}'. Expected one of: {aliases}. Available columns: {list(available_cols)}"
+                    },
+                )
+
+        if col_mapping:
+            deg_df = deg_df.rename(columns=col_mapping)
+
+        pipeline = ResearchPipeline()
+        results = pipeline.full_analysis(
+            deg_df=deg_df,
+            disease_context=disease_context,
+            tissue=tissue,
+            num_genes=num_genes
+        )
+
+        print(f"Analysis complete. Total genes analyzed: {results.get('total_genes', 0)}")
+
+        return JSONResponse(
+            status_code=200,
+            content=results
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error in /deg_with_research: {error_msg}")
+        import traceback
+        traceback.print_exc()
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "detail": error_msg,
+                "error_type": type(e).__name__
+            },
+        )
 
 
 @app.post("/get_counts/")
