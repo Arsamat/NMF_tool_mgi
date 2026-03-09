@@ -14,20 +14,16 @@ import io
 from deg.plot_helpers import place_labels_no_overlap
 
 
-def _fig_to_svg(fig, width=1400, height=None):
-    """Convert Plotly figure to SVG at specified dimensions (no system dependencies needed)."""
+def _fig_to_html(fig, width=1400, height=None):
+    """Export Plotly figure to interactive HTML at full display size."""
     try:
-        # Set figure dimensions if not already set
         if height is None:
             height = int(fig.layout.height or 500)
-        # Pass width and height directly to to_image
-        return fig.to_image(format="svg", width=width, height=height)
+        # Set dimensions and export as HTML
+        fig.update_layout(width=width, height=height)
+        return fig.to_html(include_plotlyjs='cdn')
     except Exception:
-        try:
-            # Fallback: export as HTML if SVG fails
-            return fig.to_html()
-        except Exception:
-            return None
+        return None
 
 MIN_LFC = 0.6
 MAX_FDR = 0.05
@@ -163,14 +159,14 @@ def render_deg_results_and_visualizations(deg_results_df):
     )
     st.caption("Label colors: **top 10 DEGs** = dark gray; **genes you select** = teal.")
     st.plotly_chart(fig_volcano, use_container_width=True)
-    volcano_svg = _fig_to_svg(fig_volcano, width=1400, height=int(fig_volcano.layout.height or 500))
-    if volcano_svg:
+    volcano_html = _fig_to_html(fig_volcano, width=1400, height=int(fig_volcano.layout.height or 500))
+    if volcano_html:
         st.download_button(
-            "Download volcano plot (SVG)",
-            volcano_svg,
-            "deg_volcano.svg",
-            "image/svg+xml",
-            key="deg_volcano_svg_download",
+            "Download volcano plot (HTML)",
+            volcano_html,
+            "deg_volcano.html",
+            "text/html",
+            key="deg_volcano_html_download",
         )
 
     # --- MA plot ---
@@ -239,14 +235,14 @@ def render_deg_results_and_visualizations(deg_results_df):
         )
         st.caption("Label colors: **top 10 DEGs** = dark gray; **genes you select** = teal.")
         st.plotly_chart(fig_ma, use_container_width=True)
-        ma_svg = _fig_to_svg(fig_ma, width=1400, height=int(fig_ma.layout.height or 450))
-        if ma_svg:
+        ma_html = _fig_to_html(fig_ma, width=1400, height=int(fig_ma.layout.height or 450))
+        if ma_html:
             st.download_button(
-                "Download MA plot (SVG)",
-                ma_svg,
-                "deg_ma_plot.svg",
-                "image/svg+xml",
-                key="deg_ma_svg_download",
+                "Download MA plot (HTML)",
+                ma_html,
+                "deg_ma_plot.html",
+                "text/html",
+                key="deg_ma_html_download",
             )
 
     # --- Heatmap ---
@@ -290,14 +286,14 @@ def render_deg_results_and_visualizations(deg_results_df):
             margin=dict(l=120, r=80, t=50, b=120),
         )
         st.plotly_chart(fig_heat, use_container_width=True)
-        heatmap_svg = _fig_to_svg(fig_heat, width=1600, height=int(fig_heat.layout.height or 600))
-        if heatmap_svg:
+        heatmap_html = _fig_to_html(fig_heat, width=1600, height=int(fig_heat.layout.height or 600))
+        if heatmap_html:
             st.download_button(
-                "Download heatmap (SVG)",
-                heatmap_svg,
-                "deg_expression_heatmap.svg",
-                "image/svg+xml",
-                key="deg_heatmap_svg_download",
+                "Download heatmap (HTML)",
+                heatmap_html,
+                "deg_expression_heatmap.html",
+                "text/html",
+                key="deg_heatmap_html_download",
             )
 
     # --- GSEA ---
@@ -319,14 +315,14 @@ def render_deg_results_and_visualizations(deg_results_df):
             )
             fig_gsea.update_layout(height=max(350, 25 * min(20, len(plot_df))), yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_gsea, use_container_width=True)
-            gsea_svg = _fig_to_svg(fig_gsea, width=1400, height=int(fig_gsea.layout.height or 450))
-            if gsea_svg:
+            gsea_html = _fig_to_html(fig_gsea, width=1400, height=int(fig_gsea.layout.height or 450))
+            if gsea_html:
                 st.download_button(
-                    "Download GSEA barplot (SVG)",
-                    gsea_svg,
-                    "deg_gsea_barplot.svg",
-                    "image/svg+xml",
-                    key="deg_gsea_svg_download",
+                    "Download GSEA barplot (HTML)",
+                    gsea_html,
+                    "deg_gsea_barplot.html",
+                    "text/html",
+                    key="deg_gsea_html_download",
                 )
 
     # --- Research LLM Pipeline ---
