@@ -14,12 +14,14 @@ import io
 from deg.plot_helpers import place_labels_no_overlap
 
 
-@st.cache_data(show_spinner=False)
-def _fig_to_png_cached(fig_json: str, width: int, height: int, scale: int = 2):
-    """Convert a Plotly figure (as JSON) to PNG. Cached so we don't re-export on every rerun."""
+def _fig_to_html(fig, width=1400, height=None):
+    """Export Plotly figure to interactive HTML at full display size."""
     try:
-        fig = pio.from_json(fig_json)
-        return fig.to_image(format="png", width=width, height=height, scale=scale)
+        if height is None:
+            height = int(fig.layout.height or 500)
+        # Set dimensions and export as HTML
+        fig.update_layout(width=width, height=height)
+        return fig.to_html(include_plotlyjs='cdn')
     except Exception:
         return None
 
@@ -157,20 +159,15 @@ def render_deg_results_and_visualizations(deg_results_df):
     )
     st.caption("Label colors: **top 10 DEGs** = dark gray; **genes you select** = teal.")
     st.plotly_chart(fig_volcano, use_container_width=True)
-    _volcano_h = int(fig_volcano.layout.height or 500)
-    volcano_png = _fig_to_png_cached(
-        fig_volcano.to_json(), width=1400, height=_volcano_h, scale=2
-    )
-    if volcano_png:
+    volcano_html = _fig_to_html(fig_volcano, width=1400, height=int(fig_volcano.layout.height or 500))
+    if volcano_html:
         st.download_button(
-            "Download volcano plot (PNG)",
-            volcano_png,
-            "deg_volcano.png",
-            "image/png",
-            key="deg_volcano_png_download",
+            "Download volcano plot (HTML)",
+            volcano_html,
+            "deg_volcano.html",
+            "text/html",
+            key="deg_volcano_html_download",
         )
-    else:
-        st.caption("PNG download requires `kaleido`. Install with: `pip install kaleido`")
 
     # --- MA plot ---
     if "AveExpr" in deg_df.columns:
@@ -238,20 +235,15 @@ def render_deg_results_and_visualizations(deg_results_df):
         )
         st.caption("Label colors: **top 10 DEGs** = dark gray; **genes you select** = teal.")
         st.plotly_chart(fig_ma, use_container_width=True)
-        _ma_h = int(fig_ma.layout.height or 450)
-        ma_png = _fig_to_png_cached(
-            fig_ma.to_json(), width=1400, height=_ma_h, scale=2
-        )
-        if ma_png:
+        ma_html = _fig_to_html(fig_ma, width=1400, height=int(fig_ma.layout.height or 450))
+        if ma_html:
             st.download_button(
-                "Download MA plot (PNG)",
-                ma_png,
-                "deg_ma_plot.png",
-                "image/png",
-                key="deg_ma_png_download",
+                "Download MA plot (HTML)",
+                ma_html,
+                "deg_ma_plot.html",
+                "text/html",
+                key="deg_ma_html_download",
             )
-        else:
-            st.caption("PNG download requires `kaleido`. Install with: `pip install kaleido`")
 
     # --- Heatmap ---
     hm_df = st.session_state.get("deg_heatmap_df")
@@ -294,20 +286,15 @@ def render_deg_results_and_visualizations(deg_results_df):
             margin=dict(l=120, r=80, t=50, b=120),
         )
         st.plotly_chart(fig_heat, use_container_width=True)
-        _heat_h = int(fig_heat.layout.height or 600)
-        heatmap_png = _fig_to_png_cached(
-            fig_heat.to_json(), width=1600, height=_heat_h, scale=2
-        )
-        if heatmap_png:
+        heatmap_html = _fig_to_html(fig_heat, width=1600, height=int(fig_heat.layout.height or 600))
+        if heatmap_html:
             st.download_button(
-                "Download heatmap (PNG)",
-                heatmap_png,
-                "deg_expression_heatmap.png",
-                "image/png",
-                key="deg_heatmap_png_download",
+                "Download heatmap (HTML)",
+                heatmap_html,
+                "deg_expression_heatmap.html",
+                "text/html",
+                key="deg_heatmap_html_download",
             )
-        else:
-            st.caption("PNG download requires `kaleido`. Install with: `pip install kaleido`")
 
     # --- GSEA ---
     gsea_df = st.session_state.get("deg_gsea_df")
@@ -328,20 +315,15 @@ def render_deg_results_and_visualizations(deg_results_df):
             )
             fig_gsea.update_layout(height=max(350, 25 * min(20, len(plot_df))), yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_gsea, use_container_width=True)
-            _gsea_h = int(fig_gsea.layout.height or 450)
-            gsea_png = _fig_to_png_cached(
-                fig_gsea.to_json(), width=1400, height=_gsea_h, scale=2
-            )
-            if gsea_png:
+            gsea_html = _fig_to_html(fig_gsea, width=1400, height=int(fig_gsea.layout.height or 450))
+            if gsea_html:
                 st.download_button(
-                    "Download GSEA barplot (PNG)",
-                    gsea_png,
-                    "deg_gsea_barplot.png",
-                    "image/png",
-                    key="deg_gsea_png_download",
+                    "Download GSEA barplot (HTML)",
+                    gsea_html,
+                    "deg_gsea_barplot.html",
+                    "text/html",
+                    key="deg_gsea_html_download",
                 )
-            else:
-                st.caption("PNG download requires `kaleido`. Install with: `pip install kaleido`")
 
     # --- Research LLM Pipeline ---
     st.divider()
