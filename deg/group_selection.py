@@ -8,10 +8,6 @@ import requests
 import pandas as pd
 import io
 import zipfile
-import json
-import os
-from dotenv import load_dotenv
-from anthropic import Anthropic
 from streamlit_autorefresh import st_autorefresh
 from ui_theme import apply_custom_theme
 from deg.group_helpers import (
@@ -24,85 +20,17 @@ from deg.group_helpers import (
     ensure_ec2_wake_session,
     start_ec2_once,
     check_health,
+    natural_language_to_filters
 )
 from deg.viz_helpers import render_deg_results_and_visualizations
 
-load_dotenv()
+
 
 # Default API URL and Lambda URL (wake EC2; same pattern as extract_counts_frontend)
 #DEG_API_URL = "http://3.141.231.76:8000/"
 DEG_API_URL = "http://18.218.84.81:8000/"
 DEG_LAMBDA_URL = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"
 
-
-def natural_language_to_filters(user_description: str, metadata_schema: dict) -> dict:
-    """
-    Convert natural language description to structured filter dictionary.
-
-    Args:
-        user_description: User's description of desired samples
-        metadata_schema: Schema with columns and unique_values
-
-    Returns:
-        Dictionary of filters to apply
-    """
-    import os
-
-    #api_key = os.getenv("ANTHROPIC_API_KEY")
-    api_key = st.secrets["ANTHROPIC_API_KEY"]
-    if not api_key:
-        st.error("ANTHROPIC_API_KEY not set. Natural language filtering unavailable.")
-        return {}
-
-    # Format schema for Claude
-    unique_values = metadata_schema.get("unique_values", {})
-    schema_text = "Available columns and their values:\n"
-    to_skip = ["OriginalName", "SampleName", "Replicate", "NumUnqDedupedReads", "Barcode", "Index1", "Index2", "CountsTable", "Library"]
-    for col, values in unique_values.items():
-        if col in to_skip:
-            continue
-        if col != SAMPLE_COL:
-            # Limit display to first 20 values to keep prompt manageable
-            vals_str = ", ".join([str(v) for v in sorted(values)[:20]])
-            if len(values) > 20:
-                vals_str += f", ... and {len(values) - 20} more"
-            schema_text += f"- {col}: {vals_str}\n"
-    
-    
-
-    prompt = f"""You are a metadata filtering assistant. Given a natural language description and available metadata columns,
-generate a JSON filter object.
-
-{schema_text}
-
-User request: "{user_description}"
-
-Respond ONLY with valid JSON like: {{"ColumnName": ["value1", "value2"], ...}}
-
-Rules:
-- Only use columns and values that EXACTLY match the available options above
-- Match values case-insensitively but return the exact case as shown
-- If user mentions something not in the schema, omit it
-- Return empty {{}} if request doesn't match any columns
-- If user is ambiguous, make reasonable assumptions based on biological context
-- Return only the JSON, no other text"""
-
-    try:
-        client = Anthropic(api_key=api_key)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        response_text = message.content[0].text.strip()
-
-        # Parse JSON response
-        filters = json.loads(response_text)
-        return filters if isinstance(filters, dict) else {}
-    except Exception as e:
-        st.error(f"Error generating filters: {e}")
-        return {}
 
 
 def _ensure_session():
@@ -169,7 +97,7 @@ def run_group_selection():
     # ----- Step 2: Optional filters (with two filtering methods) -----
     st.subheader("Step 2: (Optional) Filter metadata")
 
-    tab1, tab2 = st.tabs(["Manual Selection", "Natural Language"])
+    tab1, tab2, tab3= st.tabs(["Manual Selection", "Natural Language", "View Available Sample Values"])
 
     with tab1:
         st.markdown("### Manual Filter Selection")
@@ -199,8 +127,9 @@ def run_group_selection():
     with tab2:
         st.markdown("### Natural Language Filter")
         st.caption("Describe what samples you want in natural language")
+        st.write(":red[When building a query mention what samples you want to use as control samples!]")
         user_description = st.text_area(
-            "Example: 'Give me TDP43-treated samples with high dose from the prefrontal cortex'",
+            "Example query: Give me WT or TDP43 iMNs treated with Rotenone at any timepoint excluding 96 hr",
             key="deg_nl_filter_input",
             height=80,
             placeholder="Type your filter description here..."
@@ -247,6 +176,15 @@ def run_group_selection():
                 st.rerun()
         else:
             st.caption("Generated filters will appear here")
+    
+    with tab3:
+        st.markdown("### View Available Metadata Values")
+        vals_to_view = ["Genotype", "Treatment2", "Timepoint", "Dose", "CellType", "Maturity"]
+        for val in vals_to_view:
+            values = sorted(unique_vals[val])
+            with st.expander(f"{val} ({len(values)} unique)"):
+                st.write(values)
+        
 
     # ----- Step 3: Load metadata table -----
     st.subheader("Step 3: Load metadata table")

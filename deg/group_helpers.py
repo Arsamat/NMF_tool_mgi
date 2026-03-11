@@ -6,10 +6,98 @@ import streamlit as st
 import pandas as pd
 import time
 import requests
+from dotenv import load_dotenv
+from anthropic import Anthropic
+import json
+import os
 
 SAMPLE_COL = "SampleName"
+load_dotenv()
 
 # --- Authentication (same pattern as brb_data_pages/extract_counts_frontend) ---
+
+
+def natural_language_to_filters(user_description: str, metadata_schema: dict) -> dict:
+    """
+    Convert natural language description to structured filter dictionary.
+
+    Args:
+        user_description: User's description of desired samples
+        metadata_schema: Schema with columns and unique_values
+
+    Returns:
+        Dictionary of filters to apply
+    """
+    import os
+
+    #api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = st.secrets["ANTHROPIC_API_KEY"]
+    if not api_key:
+        st.error("ANTHROPIC_API_KEY not set. Natural language filtering unavailable.")
+        return {}
+
+    # Format schema for Claude
+    unique_values = metadata_schema.get("unique_values", {})
+    schema_text = "Available columns and their values:\n"
+    to_skip = ["OriginalName", "SampleName", "Replicate", "NumUnqDedupedReads", "Barcode", "Index1", "Index2", "CountsTable", "Library"]
+    for col, values in unique_values.items():
+        if col in to_skip:
+            continue
+        if col != SAMPLE_COL:
+            # Limit display to first 20 values to keep prompt manageable
+            vals_str = ", ".join([str(v) for v in sorted(values)[:30]])
+            if len(values) > 20:
+                vals_str += f", ... and {len(values) - 20} more"
+            schema_text += f"- {col}: {vals_str}\n"
+
+
+    prompt = f"""You are a metadata filtering assistant. Convert natural language descriptions to JSON filters.
+
+{schema_text}
+
+User request: "{user_description}"
+
+RULES:
+1. Handle OR logic: "WT or TDP43" → {{"Genotype": ["WT", "TDP43"]}}
+2. Handle exclusions: "all timepoints excluding 96 hr" means ALL timepoint values EXCEPT 96
+3. Match case-insensitively but return exact case from schema above
+4. Return ONLY valid JSON: {{"ColumnName": ["value1", "value2"]}}
+5. Return {{}} only if completely unrelated to schema
+
+EXAMPLES:
+- "WT or TDP43 treated with Rotenone at all timepoints excluding 96 hr"
+  → {{"Genotype": ["WT", "TDP43"], "Treatment": ["Rotenone"], "Timepoint": [6, 12, 16, 24, 48, 72]}}
+- "PINK1 or LATS2KO at 24 or 48 hours"
+  → {{"Genotype": ["PINK1", "LATS2KO"], "Timepoint": [24, 48]}}
+- "A549 cells with Rotenone but not TRULI"
+  → {{"CellType": ["A549"], "Treatment": ["Rotenone"]}}
+
+CRITICAL: When user says "excluding" or "except", compute the complement: include ALL available values MINUS the excluded ones.
+Return only JSON, no explanation."""
+
+    try:
+        client = Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        response_text = message.content[0].text.strip()
+
+        # Parse JSON response
+        filters = json.loads(response_text)
+
+        # Convert numeric values to integers where appropriate
+        if isinstance(filters, dict):
+            for col, values in filters.items():
+                if isinstance(values, list):
+                    filters[col] = [int(v) if isinstance(v, float) and v.is_integer() else v for v in values]
+
+        return filters if isinstance(filters, dict) else {}
+    except Exception as e:
+        st.error(f"Error generating filters: {e}")
+        return {}
 
 
 def ensure_auth_session():
