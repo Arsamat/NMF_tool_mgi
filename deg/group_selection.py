@@ -14,6 +14,8 @@ from deg.group_helpers import (
     add_to_group,
     remove_from_group,
     clear_group,
+    add_samples_to_group,
+    natural_language_group_assignment,
     SAMPLE_COL,
     ensure_auth_session,
     authenticate,
@@ -32,7 +34,6 @@ DEG_API_URL = "http://18.218.84.81:8000/"
 DEG_LAMBDA_URL = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"
 
 
-
 def _ensure_session():
     st.session_state.setdefault("deg_api_url", DEG_API_URL)
     st.session_state.setdefault("deg_schema", None)
@@ -41,6 +42,7 @@ def _ensure_session():
     st.session_state.setdefault("deg_group_b", [])
     st.session_state.setdefault("deg_filters", {})
     st.session_state.setdefault("deg_editor_reset", 0)  # increment to reset data_editor checkboxes
+    st.session_state.setdefault("deg_nl_filter_input_reset", 0)
     st.session_state.setdefault("deg_heatmap_df", None)   # matrix (genes x samples), row index = gene label
     st.session_state.setdefault("deg_heatmap_annotation_df", None)  # SampleName, Group
     st.session_state.setdefault("deg_gsea_df", None)      # GSEA Hallmark results table
@@ -60,7 +62,7 @@ def run_group_selection():
     if not st.session_state.get("deg_ec2_start_triggered"):
         start_ec2_once()
     if not st.session_state.get("deg_fastapi_ready", "False"):
-        st.info("Waking up the compute node… this usually takes 1–4 minutes. Please wait until it is ready to proceed.")
+        st.info("Waking up the compute node… Please wait until it is ready to proceed.")
         check_health(DEG_API_URL.rstrip("/") + "/healthz")
         st_autorefresh(interval=8000, key="deg_wake_refresh")
         return
@@ -74,8 +76,8 @@ def run_group_selection():
     st.title("DEG Analysis: Group Selection")
 
     # ----- Step 1: Load schema -----
-    st.subheader("Step 1: Load metadata schema")
-    if st.button("Load schema"):
+    #st.subheader("Step 1: Load metadata schema")
+    if st.session_state.get("deg_fastapi_ready", "False") and st.session_state.get("deg_schema") is None:
         try:
             r = requests.get(f"{api_url}get_metadata/", timeout=30)
             r.raise_for_status()
@@ -95,7 +97,7 @@ def run_group_selection():
     filterable_columns = [c for c in columns if c != SAMPLE_COL]
 
     # ----- Step 2: Optional filters (with two filtering methods) -----
-    st.subheader("Step 2: (Optional) Filter metadata")
+    st.subheader("Step 1: (Optional) Filter metadata")
 
     tab1, tab2, tab3= st.tabs(["Manual Selection", "Natural Language", "View Available Sample Values"])
 
@@ -127,10 +129,11 @@ def run_group_selection():
     with tab2:
         st.markdown("### Natural Language Filter")
         st.caption("Describe what samples you want in natural language")
+        st.caption("Note: This is an experimental feature and may not work as expected all the time.")
         st.write(":red[When building a query mention what samples you want to use as control samples!]")
         user_description = st.text_area(
             "Example query: Give me WT or TDP43 iMNs treated with Rotenone at any timepoint excluding 96 hr",
-            key="deg_nl_filter_input",
+            key=f"deg_nl_filter_input_{st.session_state.get('deg_nl_filter_input_reset', 0)}",
             height=80,
             placeholder="Type your filter description here..."
         )
@@ -143,7 +146,8 @@ def run_group_selection():
 
         if clear_nl_btn:
             st.session_state["deg_nl_filters"] = {}
-            st.session_state["deg_nl_filter_input"] = ""
+            #st.session_state["deg_nl_filter_input"] = ""
+            st.session_state["deg_nl_filter_input_reset"] = st.session_state.get("deg_nl_filter_input_reset", 0) + 1
             st.rerun()
 
         if generate_btn:
@@ -169,17 +173,17 @@ def run_group_selection():
                     st.caption(", ".join([str(v)[:15] for v in values[:5]]) + ("..." if len(values) > 5 else ""))
 
 
+            st.write(":red[Click Apply These Filters to load metadata table based on AI generated filters]")
             # Apply button
             if st.button("✓ Apply These Filters", key="deg_apply_nl_filters"):
-                st.session_state["deg_filters"] = nl_filters
                 st.success("Filters applied!")
-                st.rerun()
+                st.session_state["deg_filters"] = nl_filters
         else:
             st.caption("Generated filters will appear here")
     
     with tab3:
         st.markdown("### View Available Metadata Values")
-        vals_to_view = ["Genotype", "Treatment2", "Timepoint", "Dose", "CellType", "Maturity"]
+        vals_to_view = ["Genotype", "Treatment2", "Timepoint", "Treatment","Dose", "CellType", "Maturity"]
         for val in vals_to_view:
             values = sorted(unique_vals[val])
             with st.expander(f"{val} ({len(values)} unique)"):
@@ -187,7 +191,7 @@ def run_group_selection():
         
 
     # ----- Step 3: Load metadata table -----
-    st.subheader("Step 3: Load metadata table")
+    st.subheader("Step 2: Load metadata table")
     if st.button("Load metadata table"):
         try:
             # Get filters from session state (set by either tab)
@@ -222,7 +226,25 @@ def run_group_selection():
         st.session_state["deg_metadata_df"] = meta_df
 
     # ----- Step 4: Select samples and assign to groups -----
-    st.subheader("Step 4: Select samples and assign to Comparison Group or Reference Group")
+    st.subheader("Step 3: Select samples and assign to Comparison Group or Reference Group")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Select all rows", key="deg_select_all"):
+            df = st.session_state["deg_metadata_df"].copy()
+            df["Select"] = True
+            st.session_state["deg_metadata_df"] = df
+            st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+            st.rerun()
+    with col2:
+        if st.button("Clear selection", key="deg_clear_all"):
+            df = st.session_state["deg_metadata_df"].copy()
+            df["Select"] = False
+            st.session_state["deg_metadata_df"] = df
+            st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+            st.rerun()
+    
+
     editor_key = f"deg_data_editor_{st.session_state.get('deg_editor_reset', 0)}"
     edited = st.data_editor(
         meta_df,
@@ -263,10 +285,85 @@ def run_group_selection():
         st.button("Clear Reference Group", on_click=clear_group, args=("deg_group_b",))
 
     st.caption(f"Comparison Group: {len(ga)} samples · Reference Group: {len(gb)} samples")
-    
+
+    with st.expander("Natural Language Group Assignment", expanded=True):
+        # ----- AI Group Assignment -----
+        st.divider()
+        st.markdown("#### 🤖 Add Samples via AI Query")
+        st.caption(
+            "Describe the samples you want and which group to put them in. "
+            "Example: *Add WT samples treated with Rotenone at 24h to Comparison Group*"
+        )
+
+        llm_query = st.text_area(
+            "Query",
+            key="deg_llm_group_query",
+            height=80,
+            placeholder="e.g. Add TDP43 Vehicle controls to Reference Group",
+            label_visibility="collapsed",
+        )
+
+        col_llm1, col_llm2 = st.columns([2, 1])
+        with col_llm1:
+            ask_btn = st.button("🤖 Ask AI to Add Samples", key="deg_llm_group_btn")
+        with col_llm2:
+            if st.button("Clear AI result", key="deg_llm_clear_btn"):
+                st.session_state.pop("deg_llm_group_result", None)
+                st.rerun()
+
+        if ask_btn:
+            if not llm_query.strip():
+                st.warning("Please enter a query first.")
+            else:
+                with st.spinner("Asking AI…"):
+                    result = natural_language_group_assignment(
+                        llm_query,
+                        st.session_state["deg_metadata_df"],
+                        st.session_state["deg_schema"],
+                    )
+                if result["error"]:
+                    st.error(f"AI error: {result['error']}")
+                else:
+                    res_a = result["group_a"]
+                    res_b = result["group_b"]
+                    added_a, added_b = [], []
+                    if res_a["samples"]:
+                        added_a = add_samples_to_group(res_a["samples"], "deg_group_a", "deg_group_b") or []
+                    if res_b["samples"]:
+                        added_b = add_samples_to_group(res_b["samples"], "deg_group_b", "deg_group_a") or []
+                    st.session_state["deg_llm_group_result"] = {
+                        "group_a": {"filters": res_a["filters"], "matched": res_a["samples"], "added": added_a},
+                        "group_b": {"filters": res_b["filters"], "matched": res_b["samples"], "added": added_b},
+                    }
+                    st.rerun()
+
+        llm_result = st.session_state.get("deg_llm_group_result")
+        if llm_result:
+            def _show_group_result(label, data):
+                filters = data["filters"]
+                matched = data["matched"]
+                added = data["added"]
+                if not filters and not matched:
+                    return
+                if filters:
+                    filter_summary = ", ".join(f"{k}: {v}" for k, v in filters.items())
+                    st.info(f"**{label} filters:** {filter_summary}")
+                if not matched:
+                    st.warning(f"No samples matched for {label}. Try rephrasing.")
+                else:
+                    skipped = len(matched) - len(added)
+                    st.success(
+                        f"Added **{len(added)}** sample(s) to **{label}**"
+                        + (f" ({skipped} skipped — already in a group)" if skipped else "")
+                    )
+                    with st.expander(f"{label} matched samples ({len(matched)})"):
+                        st.write(matched)
+
+            _show_group_result("Comparison Group", llm_result["group_a"])
+            _show_group_result("Reference Group", llm_result["group_b"])
 
     # ----- Step 5: Submit to backend -----
-    st.subheader("Step 5: Send groups to backend")
+    st.subheader("Step 4: Send groups to backend")
     if st.button("Submit groups for DEG analysis", type="primary"):
         if not ga or not gb:
             st.warning("Both groups must have at least one sample.")
