@@ -12,6 +12,8 @@ import requests
 import io
 
 from deg.plot_helpers import place_labels_no_overlap
+from deg.hypothesis_validator_ui import validate_and_display
+from deg.hypothesis_validator_ui import display_hypothesis_validation_results
 
 
 def _fig_to_html(fig, width=1400, height=None):
@@ -29,7 +31,7 @@ MIN_LFC = 0.6
 MAX_FDR = 0.05
 
 # Default API URL
-DEG_API_URL = "http://3.141.231.76:8000/"
+DEG_API_URL = "http://18.218.84.81:8000/"
 
 
 def _ensure_research_session():
@@ -330,7 +332,7 @@ def render_deg_results_and_visualizations(deg_results_df):
     st.subheader("AI-Powered Research Insights")
     st.caption("Generate disease associations, drug response predictions, and research hypotheses using Claude LLM.")
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.session_state["deg_research_disease_context"] = st.text_input(
             "Disease context:",
@@ -349,6 +351,11 @@ def render_deg_results_and_visualizations(deg_results_df):
             value=st.session_state.get("deg_research_num_genes", 10),
             key="deg_num_genes_input"
         )
+    with col4:
+        st.session_state["deg_comparison_description"] = st.text_input(
+            "Comparison description:",
+            key="deg_comparison_description_input"
+        )
 
     if st.button("Run Research Pipeline", type="primary", key="deg_research_run"):
         _ensure_research_session()
@@ -365,7 +372,8 @@ def render_deg_results_and_visualizations(deg_results_df):
                 data = {
                     "disease_context": st.session_state["deg_research_disease_context"],
                     "tissue": st.session_state["deg_research_tissue"],
-                    "num_genes": st.session_state["deg_research_num_genes"]
+                    "num_genes": st.session_state["deg_research_num_genes"],
+                    "comparison_description": st.session_state["deg_comparison_description"]
                 }
 
                 # Send request to backend
@@ -478,11 +486,9 @@ def render_deg_results_and_visualizations(deg_results_df):
                     "text/plain",
                     key="deg_hypotheses_download",
                 )
-
-        # Show error/note if present
-        if "prediction_error" in research_results:
-            st.warning(f"Prediction error: {research_results['prediction_error']}")
-        if "note" in research_results:
-            st.info(f"Note: {research_results['note']}")
-
-        # (Per-section download buttons above replace the previous JSON download)
+        
+        # if st.button("Validate hypotheses against literature", key="deg_validate_hypotheses"):
+        #     validate_and_display(st.session_state.get("deg_api_url", DEG_API_URL), hyp_text, max_papers=10)
+        
+        # if "deg_hypothesis_validation_results" in st.session_state and st.session_state["deg_hypothesis_validation_results"] is not None:
+        #     display_hypothesis_validation_results(st.session_state["deg_hypothesis_validation_results"])
