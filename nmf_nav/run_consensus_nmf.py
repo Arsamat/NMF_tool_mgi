@@ -54,6 +54,7 @@ def run_cnmf():
         # NMF background execution
         "cnmf_running": False,
         "cnmf_zip_bytes": None,
+        "cnmf_zip_parsed": False,
         "cnmf_queue": None,
         "cnmf_executor": None,
         "display_scores": None,
@@ -173,6 +174,12 @@ def run_cnmf():
     if st.button("Run CNMF") and not st.session_state["cnmf_running"]:
         api_url = st.session_state["API_URL"]
         preprocessed_bytes = st.session_state["preprocessed_feather"]
+        st.session_state["cnmf_zip_parsed"] = False
+        st.session_state["cnmf_zip_bytes"] = None
+        st.session_state["cnmf_module_usages"] = None
+        st.session_state["cnmf_module_usages_transposed"] = None
+        st.session_state["cnmf_gene_loadings"] = None
+        st.session_state["cnmf_pdf"] = None
 
         meta_buf = io.StringIO()
         meta.to_csv(meta_buf, sep="\t", index=False)
@@ -213,6 +220,7 @@ def run_cnmf():
 
             if status == "success":
                 st.session_state["cnmf_zip_bytes"] = payload
+                st.session_state["cnmf_zip_parsed"] = False
                 st.success("CNMF completed successfully! You can now visualize heatmaps")
             else:
                 st.error(f"CNMF failed: {payload}")
@@ -231,22 +239,24 @@ def run_cnmf():
         st.info("No CNMF results yet.")
         st.stop()
 
-    zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    if not st.session_state.get("cnmf_zip_parsed", False):
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
 
-    # Parse ZIP
-    for name in zf.namelist():
-        
-        if name.endswith(".pdf"):
-            st.session_state["cnmf_pdf"] = zf.read(name)
+        # Parse ZIP only once per CNMF run to avoid expensive re-parsing on UI reruns.
+        for name in zf.namelist():
+            if name.endswith(".pdf"):
+                st.session_state["cnmf_pdf"] = zf.read(name)
 
-        elif ".usages" in name.lower():
-            df = pd.read_csv(zf.open(name), sep="\t", index_col=0)
-            st.session_state["cnmf_module_usages"] = df
-            st.session_state["cnmf_module_usages_transposed"] = st.session_state["cnmf_module_usages"].T
+            elif ".usages" in name.lower():
+                df = pd.read_csv(zf.open(name), sep="\t", index_col=0)
+                st.session_state["cnmf_module_usages"] = df
+                st.session_state["cnmf_module_usages_transposed"] = st.session_state["cnmf_module_usages"].T
 
-        elif ".gene" in name.lower():
-            df = pd.read_csv(zf.open(name), sep="\t", index_col=0)
-            st.session_state["cnmf_gene_loadings"] = df
+            elif ".gene" in name.lower():
+                df = pd.read_csv(zf.open(name), sep="\t", index_col=0)
+                st.session_state["cnmf_gene_loadings"] = df
+
+        st.session_state["cnmf_zip_parsed"] = True
 
     # Check load
     if st.session_state["cnmf_module_usages"] is None or st.session_state["cnmf_gene_loadings"] is None:
