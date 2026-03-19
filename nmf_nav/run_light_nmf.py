@@ -44,6 +44,7 @@ def run_nmf():
         "module_leaf_order": None,
         "module_cluster_labels": None,
         "preview_png": None,
+        "preview_pdf": None,
         "annotations_default": None
     }
 
@@ -139,6 +140,9 @@ def run_nmf():
                             
                         elif "_h" in name:
                             st.session_state["gene_loadings"] = pd.read_feather(z.open(name)).set_index("module")
+                # Reset derived preview artifacts when a new run completes.
+                st.session_state["preview_png"] = None
+                st.session_state["preview_pdf"] = None
                 if r.status_code == 200:
                     st.success("NMF finished running. You can now visualize heatmaps")
 
@@ -209,6 +213,7 @@ def run_nmf():
             resp = requests.post(st.session_state["API_URL"] + "/initial_heatmap_preview/", files=files, data=data)
 
             st.session_state["preview_png"] = resp.content
+            st.session_state["preview_pdf"] = save_pdf(df)
 
         if st.session_state["preview_png"] is not None:
             st.image(st.session_state["preview_png"])
@@ -219,13 +224,13 @@ def run_nmf():
                 mime="image/png"
             )
 
-            pdf_bytes = save_pdf(df)
-            st.download_button(
-                "Download PDF",
-                pdf_bytes,
-                "heatmap.pdf",
-                mime="application/pdf"
-            )
+            if st.session_state["preview_pdf"] is not None:
+                st.download_button(
+                    "Download PDF",
+                    st.session_state["preview_pdf"],
+                    "heatmap.pdf",
+                    mime="application/pdf"
+                )
 
         # -------------------------------------------------------------
         # ALL BACKEND-RENDERED SECTIONS (unchanged)
@@ -338,8 +343,8 @@ def run_nmf():
                         mime="image/png"
                     )
             
-            if st.checkbox("Calculate Hypergeometric Values"):
-                hypergeom_ui(meta_bytes, st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
+                    if st.checkbox("Calculate Hypergeometric Values"):
+                        hypergeom_ui(meta_bytes, st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
 
             # MODULE CLUSTERING
             if st.checkbox("Hierarchically Cluster Modules"):
