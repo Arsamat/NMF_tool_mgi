@@ -42,17 +42,6 @@ def get_expression_heatmap(gene_loadings_df, default_values):
             step=1
         )
 
-        # ----------------------------------------------------------
-        # Convert DataFrames → Feather (in-memory)
-        # ----------------------------------------------------------
-        gene_loadings_buf = io.BytesIO()
-        gene_loadings_df.reset_index(drop=False).to_feather(gene_loadings_buf)
-        gene_loadings_buf.seek(0)
-
-        metadata_buf = io.BytesIO()
-        metadata_df.reset_index(drop=False).to_feather(metadata_buf)
-        metadata_buf.seek(0)
-
         submit_expr_heatmap = st.form_submit_button("Generate Expression Heatmap")
 
     # preprocessed_df_bytes is already a bytes-like feather object from your pipeline
@@ -62,6 +51,13 @@ def get_expression_heatmap(gene_loadings_df, default_values):
     # ----------------------------------------------------------
     if submit_expr_heatmap:
         with st.spinner("Rendering heatmap on backend..."):
+            gene_loadings_buf = io.BytesIO()
+            gene_loadings_df.reset_index(drop=False).to_feather(gene_loadings_buf)
+            gene_loadings_buf.seek(0)
+
+            metadata_buf = io.BytesIO()
+            metadata_df.reset_index(drop=False).to_feather(metadata_buf)
+            metadata_buf.seek(0)
 
             files = {
                 "gene_loadings": ("gene_loadings.feather", gene_loadings_buf, "application/octet-stream"),

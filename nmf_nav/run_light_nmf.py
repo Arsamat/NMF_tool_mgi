@@ -55,9 +55,8 @@ def run_nmf():
     # -------------------------------------------------------------
     # CACHING UTILITIES
     # -------------------------------------------------------------
-    @st.cache_data
-    def cached_feather_bytes(df):
-        """DataFrame → feather bytes (cached)."""
+    def to_feather_buffer(df):
+        """DataFrame → in-memory feather buffer."""
         buf = io.BytesIO()
         df.reset_index(drop=False).to_feather(buf)
         buf.seek(0)
@@ -197,8 +196,8 @@ def run_nmf():
             submitted = st.form_submit_button("Generate Preview")
 
         if submitted:
-            module_bytes = cached_feather_bytes(st.session_state["module_usages_T"])
-            meta_bytes = cached_feather_bytes(meta)
+            module_bytes = to_feather_buffer(st.session_state["module_usages_T"])
+            meta_bytes = to_feather_buffer(meta)
             metadata_index = st.session_state.get("metadata_index", "")
             st.session_state["annotations_default"] = annotation_cols
 
@@ -240,11 +239,10 @@ def run_nmf():
 
         # SAMPLE CLUSTERING
         if st.checkbox("Hierarchically cluster samples"):
-            module_bytes = cached_feather_bytes(st.session_state["module_usages"])
-            meta_bytes = cached_feather_bytes(meta)
-
             st.subheader("Step 1: Run Hierarchical Clustering of Samples to Determine Number of Clusters")
             if st.button("Run"):
+                module_bytes = to_feather_buffer(st.session_state["module_usages"])
+                meta_bytes = to_feather_buffer(meta)
                 files = {
                     "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                     "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -273,6 +271,8 @@ def run_nmf():
             k_samples = st.number_input("Number of clusters", 2, 10, 3)
 
             if st.button("Run Sample Clustering"):
+                module_bytes = to_feather_buffer(st.session_state["module_usages"])
+                meta_bytes = to_feather_buffer(meta)
                 files = {
                     "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                     "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -313,6 +313,8 @@ def run_nmf():
                     submit_annot = st.form_submit_button("Generate Annotated Heatmap")
 
                 if submit_annot:
+                    module_bytes = to_feather_buffer(st.session_state["module_usages"])
+                    meta_bytes = to_feather_buffer(meta)
                     files = {
                         "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                         "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -344,7 +346,7 @@ def run_nmf():
                     )
             
                     if st.checkbox("Calculate Hypergeometric Values"):
-                        hypergeom_ui(meta_bytes, st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
+                        hypergeom_ui(to_feather_buffer(meta), st.session_state["module_usages"], st.session_state["sample_cluster_labels"])
 
             # MODULE CLUSTERING
             if st.checkbox("Hierarchically Cluster Modules"):
@@ -391,7 +393,6 @@ def run_nmf():
                         )
 
                 module_heatmap_ui(
-                    meta_bytes,
                     st.session_state["module_usages"],
                     st.session_state["sample_order"],
                     st.session_state["module_leaf_order"],
@@ -414,8 +415,8 @@ def run_nmf():
 
             if submit_top_samples:
                 files = {
-                    "module_usages": ("modules.feather", cached_feather_bytes(st.session_state["module_usages"]), "application/octet-stream"),
-                    "metadata": ("meta.feather", cached_feather_bytes(meta), "application/octet-stream"),
+                    "module_usages": ("modules.feather", to_feather_buffer(st.session_state["module_usages"]), "application/octet-stream"),
+                    "metadata": ("meta.feather", to_feather_buffer(meta), "application/octet-stream"),
                 }
                 data = {"metadata_index": st.session_state["metadata_index"], "annotation_cols": ",".join(annotation_cols)}
 
