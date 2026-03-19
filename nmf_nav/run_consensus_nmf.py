@@ -75,9 +75,8 @@ def run_cnmf():
     # ================================================================
     # UTILITY FUNCTIONS
     # ================================================================
-    @st.cache_data
-    def cached_feather_bytes(df):
-        """Convert DF → feather bytes (cached)."""
+    def to_feather_buffer(df):
+        """Convert DataFrame to an in-memory feather buffer."""
         buf = io.BytesIO()
         df.reset_index(drop=False).to_feather(buf)
         buf.seek(0)
@@ -335,8 +334,8 @@ def run_cnmf():
             st.warning("No overlapping samples in module usages and metadata.")
         else:
             #df_sub = module_usages_T[common_samples]
-            module_bytes = cached_feather_bytes(st.session_state["cnmf_module_usages_transposed"])
-            meta_bytes = cached_feather_bytes(meta)
+            module_bytes = to_feather_buffer(st.session_state["cnmf_module_usages_transposed"])
+            meta_bytes = to_feather_buffer(meta)
 
             files = {
                 "df": ("modules.feather", module_bytes, "application/octet-stream"),
@@ -365,11 +364,10 @@ def run_cnmf():
     # ================================================================
     st.markdown("---")
     if st.checkbox("Cluster Samples"):
-        module_bytes = cached_feather_bytes(st.session_state["cnmf_module_usages"])
-        meta_bytes = cached_feather_bytes(meta)
-
         st.subheader("Step 1 — Run Dendrogram Without Clustering")
         if st.button("Run Sample Dendrogram"):
+            module_bytes = to_feather_buffer(st.session_state["cnmf_module_usages"])
+            meta_bytes = to_feather_buffer(meta)
             files = {
                 "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                 "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -399,6 +397,8 @@ def run_cnmf():
         k_samples = st.number_input("Number of sample clusters", 2, 10, 3)
 
         if st.button("Run Sample Clustering"):
+            module_bytes = to_feather_buffer(st.session_state["cnmf_module_usages"])
+            meta_bytes = to_feather_buffer(meta)
             files = {
                 "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                 "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -443,6 +443,8 @@ def run_cnmf():
                 submit_annot = st.form_submit_button("Generate Annotated Heatmap")
 
             if submit_annot:
+                module_bytes = to_feather_buffer(st.session_state["cnmf_module_usages"])
+                meta_bytes = to_feather_buffer(meta)
                 files = {
                     "module_usages": ("modules.feather", module_bytes, "application/octet-stream"),
                     "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
@@ -481,7 +483,7 @@ def run_cnmf():
         # ============================================================
         if st.checkbox("Calculate Hypergeometric Values"):
             hypergeom_ui(
-                meta_bytes,
+                to_feather_buffer(meta),
                 st.session_state["cnmf_module_usages"],
                 st.session_state["cnmf_sample_cluster_labels"]
             )
@@ -537,7 +539,6 @@ def run_cnmf():
 
             # Render heatmap using CNMF values
             module_heatmap_ui(
-                meta_bytes,
                 st.session_state["cnmf_module_usages"],
                 st.session_state["cnmf_sample_order"],
                 st.session_state["cnmf_module_leaf_order"],
@@ -562,8 +563,8 @@ def run_cnmf():
 
         if submit_top:
             files = {
-                "module_usages": ("modules.feather", cached_feather_bytes(st.session_state["cnmf_module_usages"]), "application/octet-stream"),
-                "metadata": ("meta.feather", cached_feather_bytes(meta), "application/octet-stream"),
+                "module_usages": ("modules.feather", to_feather_buffer(st.session_state["cnmf_module_usages"]), "application/octet-stream"),
+                "metadata": ("meta.feather", to_feather_buffer(meta), "application/octet-stream"),
             }
             data = {
                 "metadata_index": metadata_index,

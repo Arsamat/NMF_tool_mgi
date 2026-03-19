@@ -4,7 +4,6 @@ import json
 from io import BytesIO
 
 def module_heatmap_ui(
-        meta_bytes,
         module_usages,
         sample_order,
         module_leaf_order,
@@ -50,10 +49,13 @@ def module_heatmap_ui(
         buf_mod = BytesIO()
         module_usages.reset_index(drop=False).to_feather(buf_mod)
         buf_mod.seek(0)
+        meta_buf = BytesIO()
+        st.session_state["meta"].reset_index(drop=False).to_feather(meta_buf)
+        meta_buf.seek(0)
 
         files = {
             "module_usages": ("module.feather", buf_mod, "application/octet-stream"),
-            "metadata": ("meta.feather", meta_bytes, "application/octet-stream"),
+            "metadata": ("meta.feather", meta_buf, "application/octet-stream"),
         }
 
         data = {
@@ -72,7 +74,7 @@ def module_heatmap_ui(
             return
 
         result = resp.json()
-        png_bytes = BytesIO(bytes.fromhex(result["heatmap_png"]))
+        png_bytes = bytes.fromhex(result["heatmap_png"])
 
         # ---------- SAVE TO THE CORRECT SESSION STATE ----------
         if cnmf:
