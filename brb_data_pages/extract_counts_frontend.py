@@ -5,8 +5,8 @@ import io
 import zipfile
 import json
 import time
-import urllib
 from streamlit_autorefresh import st_autorefresh
+from .backend_download import presigned_download_url
 from .visualize_data import visualize_metadata
 
 def authenticate():
@@ -246,12 +246,14 @@ def extract_data():
                         st.subheader("Counts Table Short Version Preview:")
                         st.dataframe(st.session_state["counts_tmp"])
 
-                        api = st.session_state["API_URL"].rstrip("/")
+                        api = st.session_state["API_URL"]
                         job_id = st.session_state["job_id_tmp"]
 
-                        download_endpoint = f"{api}/download_preprocessed_data?job_id={urllib.parse.quote(job_id)}&data_type=counts"
-
-                        st.link_button("Download Full Loaded Counts Table", download_endpoint)
+                        try:
+                            dl_url = presigned_download_url(api, job_id, "counts")
+                            st.link_button("Download Full Loaded Counts Table", dl_url)
+                        except Exception as e:
+                            st.error(f"Could not get download link: {e}")
 
                     
                         if st.button("Move to NMF Tool"):

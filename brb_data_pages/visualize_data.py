@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import streamlit as st
 import plotly.express as px
 import pandas as pd
@@ -25,13 +27,18 @@ def add_facet_gutters(fig, gap_x=0.02, gap_y=0.05):
             ax.domain = [d0 + gap_y / 2, d1 - gap_y / 2]
 
 
-def visualize_metadata():
-    if "metadata_tmp" not in st.session_state or st.session_state["metadata_tmp"] is None:
+def visualize_metadata(df: pd.DataFrame | None = None) -> None:
+    """
+    Plot faceted metadata bar charts. If `df` is provided, it is used; otherwise
+    `st.session_state["metadata_tmp"]` is used (legacy behavior).
+    """
+    source = df if df is not None else st.session_state.get("metadata_tmp")
+    if source is None or (isinstance(source, pd.DataFrame) and source.empty):
         st.subheader("No data to visualize")
         return
 
     columns_to_display = ["Genotype", "Treatment", "Dose", "Timepoint", "CellType", "Maturity", "Background"]
-    cat_cols = [c for c in columns_to_display]
+    cat_cols = [c for c in columns_to_display if c in source.columns]
     if not cat_cols:
         st.warning("No categorical-like metadata columns found to plot.")
         return
@@ -72,7 +79,7 @@ def visualize_metadata():
     if color_col != "(none)":
         group_cols.append(color_col)
 
-    df = st.session_state["metadata_tmp"].copy()
+    df = source.copy()
 
     # --- Facet settings + keep facet levels (so we can force empty facet cells to exist) ---
     facet_rows = row_col if row_col != "(none)" else None
