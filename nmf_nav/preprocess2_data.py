@@ -6,6 +6,7 @@ import threading
 import queue
 from streamlit_autorefresh import st_autorefresh
 from ui_theme import apply_custom_theme
+from brb_data_pages.backend_download import presigned_download_url
 from .upload_counts_helper import upload_counts, upload_preprocessed_counts
 import urllib.parse
 
@@ -256,11 +257,13 @@ def run_preprocess_data():
         #st.session_state["integer_format"] = st.checkbox("Select if uploaded data is in integer format", value=st.session_state["integer_format"])
         
         job_id = st.session_state["job_id"]
-        api = st.session_state["API_URL"].rstrip("/")
+        api = st.session_state["API_URL"]
 
-        download_endpoint = f"{api}/download_preprocessed_data?job_id={urllib.parse.quote(job_id)}&data_type=preprocessed"
-
-        st.link_button("Download Full Preprocessed Data", download_endpoint)
+        try:
+            dl_url = presigned_download_url(api, job_id, "preprocessed")
+            st.link_button("Download Full Preprocessed Data", dl_url)
+        except Exception as e:
+            st.error(f"Could not get download link: {e}")
     
         st.markdown("---")
 

@@ -37,6 +37,7 @@ def home_page():
     #st.session_state["API_URL"] = "http://52.14.223.10:8000/"
 
     st.write("# Welcome to NMF exploration tool!")
+
     st.markdown("""
     Non-negative matrix factorization is a dimensionality reduction and feature extraction approach for non-negative data. 
     An input matrix **V** containing expression counts for **m transcripts x n samples** will be decomposed into **W (m x k)** and **H (k x n)**, such that **V ≈ WH**.
@@ -56,6 +57,9 @@ def home_page():
     You will be able to download the usage score heatmap for matrix **H**, the usage scores themselves, and the **gene spectra z-scores**, or how much each transcript contributes to each gene module.
     """
     )
+    st.write("---")
+    st.subheader("Watch video tutorial")
+    st.video("https://youtu.be/6A8jet3-6nA?si=gJpLt4ayBHyb5Qxw")
 
     if st.button("Continue"):
         st.session_state["_go_to"] = "Metadata Upload"
