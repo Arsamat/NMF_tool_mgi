@@ -196,7 +196,16 @@ def check_health(health_url: str):
         st.session_state["deg_fastapi_ready"] = False
 
 
-def add_to_group(edited, group_key, other_group_key, sample_col=SAMPLE_COL):
+def add_to_group(
+    edited,
+    group_key,
+    other_group_key,
+    sample_col=SAMPLE_COL,
+    *,
+    metadata_df_key="deg_metadata_df",
+    editor_reset_key="deg_editor_reset",
+    dup_warning_key="deg_dup_warning",
+):
     """Add selected samples from the data_editor to group_key; clear selections and rerun."""
     selected = edited[edited["Select"]].get(sample_col, pd.Series(dtype=object))
     to_add = selected.dropna().astype(str).tolist()
@@ -206,13 +215,13 @@ def add_to_group(edited, group_key, other_group_key, sample_col=SAMPLE_COL):
     other_current = set(st.session_state[other_group_key])
     dup = [s for s in to_add if s in current]
     if dup:
-        st.session_state["deg_dup_warning"] = (
+        st.session_state[dup_warning_key] = (
             f"Duplicate samples skipped (already in {group_key}): {', '.join(dup)}. "
             "Those additions were not made."
         )
     dup = [s for s in to_add if s in other_current]
     if dup:
-        st.session_state["deg_dup_warning"] = (
+        st.session_state[dup_warning_key] = (
             f"Duplicate samples skipped (already in {other_group_key}): {', '.join(dup)}. "
             "Those additions were not made."
         )
@@ -220,12 +229,12 @@ def add_to_group(edited, group_key, other_group_key, sample_col=SAMPLE_COL):
         if s not in current and s not in other_current:
             st.session_state[group_key].append(s)
     # Clear all selections after adding
-    df = st.session_state["deg_metadata_df"]
+    df = st.session_state[metadata_df_key]
     if "Select" in df.columns:
         df = df.copy()
         df["Select"] = False
-        st.session_state["deg_metadata_df"] = df
-    st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+        st.session_state[metadata_df_key] = df
+    st.session_state[editor_reset_key] = st.session_state.get(editor_reset_key, 0) + 1
     st.rerun()
 
 
@@ -235,19 +244,29 @@ def remove_from_group(group_key, sample):
     st.rerun()
 
 
-def clear_group(group_key):
+def clear_group(
+    group_key,
+    metadata_df_key="deg_metadata_df",
+    editor_reset_key="deg_editor_reset",
+):
     """Clear the group and reset Select checkboxes; rerun."""
     st.session_state[group_key] = []
-    df = st.session_state["deg_metadata_df"]
+    df = st.session_state[metadata_df_key]
     if "Select" in df.columns:
         df = df.copy()
         df["Select"] = False
-        st.session_state["deg_metadata_df"] = df
-    st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+        st.session_state[metadata_df_key] = df
+    st.session_state[editor_reset_key] = st.session_state.get(editor_reset_key, 0) + 1
     st.rerun()
 
 
-def add_samples_to_group(samples: list, group_key: str, other_group_key: str):
+def add_samples_to_group(
+    samples: list,
+    group_key: str,
+    other_group_key: str,
+    *,
+    dup_warning_key="deg_dup_warning",
+):
     """Add a pre-computed list of sample names to group_key, skipping duplicates."""
     if not samples:
         return
@@ -261,7 +280,7 @@ def add_samples_to_group(samples: list, group_key: str, other_group_key: str):
     if dup_other:
         warnings.append(f"Already in {other_group_key}: {', '.join(dup_other)}")
     if warnings:
-        st.session_state["deg_dup_warning"] = " | ".join(warnings)
+        st.session_state[dup_warning_key] = " | ".join(warnings)
     added = []
     for s in samples:
         if s not in current and s not in other_current:

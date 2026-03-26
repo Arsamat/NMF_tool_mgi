@@ -72,7 +72,7 @@ def run_metadata_upload():
         check_health()
         # 2) Poll readiness
         if not st.session_state["fastapi_ready"]:
-            st.info("Waking up the compute node… this usually takes 1–4 minutes. Please, wait till it is ready to proceed.")
+            st.info("Waking up the compute node… Please, wait till it is ready to proceed.")
             st_autorefresh(interval=8000, key="preproc_refresh")
         else:
             st.success("Compute node is ready.")

@@ -16,15 +16,14 @@ from deg.group_helpers import (
     clear_group,
     add_samples_to_group,
     natural_language_group_assignment,
-    SAMPLE_COL,
     ensure_auth_session,
     authenticate,
     ensure_ec2_wake_session,
     start_ec2_once,
     check_health,
-    natural_language_to_filters
 )
 from deg.viz_helpers import render_deg_results_and_visualizations
+from deg.group_selection_data_flow import render_filter_and_data_steps
 
 
 
@@ -34,21 +33,94 @@ DEG_API_URL = "http://18.218.84.81:8000/"
 DEG_LAMBDA_URL = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"
 
 
-def _ensure_session():
+def _render_step_header(step_num: int, title: str, subtitle: str = "", optional: bool = False):
+    if optional:
+        border_color = "rgba(245, 158, 11, 0.55)"  # amber
+        bg_color = "rgba(245, 158, 11, 0.10)"
+        badge_text = "OPTIONAL"
+    else:
+        border_color = "rgba(34, 197, 94, 0.55)"   # green
+        bg_color = "rgba(34, 197, 94, 0.10)"
+        badge_text = "REQUIRED"
+
+    st.markdown(
+        f"""
+        <div style="
+            margin-top: 1rem;
+            margin-bottom: 0.75rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 10px;
+            border: 1px solid {border_color};
+            background: {bg_color};
+        ">
+            <div style="font-size:0.8rem; opacity:0.85; margin-bottom:0.1rem;">
+                STEP {step_num} · {badge_text}
+            </div>
+            <div style="font-size:1.05rem; font-weight:600; margin-bottom:0.15rem;">
+                {title}
+            </div>
+            <div style="font-size:0.88rem; opacity:0.8;">
+                {subtitle}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _keys_for_mode(mode: str) -> dict:
+    """Return session/widget key names for a UI mode."""
+    if mode == "experiment":
+        state_prefix = "deg_exp_"
+        widget_prefix = "deg_exp_w_"
+    else:
+        state_prefix = "deg_novo_"
+        widget_prefix = "deg_novo_w_"
+
+    return {
+        "state_prefix": state_prefix,
+        "widget_prefix": widget_prefix,
+        "metadata_df": f"{state_prefix}metadata_df",
+        "group_a": f"{state_prefix}group_a",
+        "group_b": f"{state_prefix}group_b",
+        "filters": f"{state_prefix}filters",
+        "editor_reset": f"{state_prefix}editor_reset",
+        "nl_filter_input_reset": f"{state_prefix}nl_filter_input_reset",
+        "nl_filters": f"{state_prefix}nl_filters",
+        "llm_group_result": f"{state_prefix}llm_group_result",
+        "dup_warning": f"{state_prefix}dup_warning",
+        "heatmap_df": f"{state_prefix}heatmap_df",
+        "heatmap_annotation_df": f"{state_prefix}heatmap_annotation_df",
+        "gsea_df": f"{state_prefix}gsea_df",
+        "results_df": f"{state_prefix}results_df",
+        "counts_tmp": f"{state_prefix}counts_tmp",
+        "job_id_tmp": f"{state_prefix}job_id_tmp",
+        "visualize_data": f"{state_prefix}visualize_data",
+    }
+
+
+def _ensure_session(keys: dict):
     st.session_state.setdefault("deg_api_url", DEG_API_URL)
     st.session_state.setdefault("deg_schema", None)
-    st.session_state.setdefault("deg_metadata_df", None)  # full metadata + Select column
-    st.session_state.setdefault("deg_group_a", [])
-    st.session_state.setdefault("deg_group_b", [])
-    st.session_state.setdefault("deg_filters", {})
-    st.session_state.setdefault("deg_editor_reset", 0)  # increment to reset data_editor checkboxes
-    st.session_state.setdefault("deg_nl_filter_input_reset", 0)
-    st.session_state.setdefault("deg_heatmap_df", None)   # matrix (genes x samples), row index = gene label
-    st.session_state.setdefault("deg_heatmap_annotation_df", None)  # SampleName, Group
-    st.session_state.setdefault("deg_gsea_df", None)      # GSEA Hallmark results table
+    st.session_state.setdefault(keys["metadata_df"], None)  # full metadata + Select column
+    st.session_state.setdefault(keys["group_a"], [])
+    st.session_state.setdefault(keys["group_b"], [])
+    st.session_state.setdefault(keys["filters"], {})
+    st.session_state.setdefault(keys["editor_reset"], 0)
+    st.session_state.setdefault(keys["nl_filter_input_reset"], 0)
+    st.session_state.setdefault(keys["nl_filters"], {})
+    st.session_state.setdefault(keys["llm_group_result"], None)
+    st.session_state.setdefault(keys["dup_warning"], None)
+    st.session_state.setdefault(keys["heatmap_df"], None)
+    st.session_state.setdefault(keys["heatmap_annotation_df"], None)
+    st.session_state.setdefault(keys["gsea_df"], None)
+    st.session_state.setdefault(keys["results_df"], None)
+    st.session_state.setdefault(keys["counts_tmp"], None)
+    st.session_state.setdefault(keys["job_id_tmp"], None)
+    st.session_state.setdefault(keys["visualize_data"], False)
 
 
-def run_group_selection():
+def run_group_selection(mode: str = "novo"):
     apply_custom_theme()
 
     # --- Authentication (same as extract_counts_frontend) ---
@@ -66,14 +138,16 @@ def run_group_selection():
         check_health(DEG_API_URL.rstrip("/") + "/healthz")
         st_autorefresh(interval=8000, key="deg_wake_refresh")
         return
-    st.success("Compute node is ready.")
 
-    _ensure_session()
+    keys = _keys_for_mode(mode)
+    _ensure_session(keys)
+    wk = lambda name: f"{keys['widget_prefix']}{name}"
     api_url = st.session_state["deg_api_url"]
-    ga = st.session_state["deg_group_a"]
-    gb = st.session_state["deg_group_b"]
+    ga = st.session_state[keys["group_a"]]
+    gb = st.session_state[keys["group_b"]]
 
     st.title("DEG Analysis: Group Selection")
+    st.caption("Workflow: Filter samples -> Retrieve metadata -> Visualize/download -> Assign groups -> Run DEG")
 
     # ----- Step 1: Load schema -----
     #st.subheader("Step 1: Load metadata schema")
@@ -82,6 +156,7 @@ def run_group_selection():
             r = requests.get(f"{api_url}get_metadata/", timeout=30)
             r.raise_for_status()
             st.session_state["deg_schema"] = r.json()
+            st.success("Compute node is ready.")
             st.success("Schema loaded.")
             st.rerun()
         except Exception as e:
@@ -92,160 +167,41 @@ def run_group_selection():
         st.info("Click 'Load schema' to fetch metadata columns and filter options.")
         return
 
-    columns = schema.get("columns", [])
-    unique_vals = schema.get("unique_values", {})
-    filterable_columns = [c for c in columns if c != SAMPLE_COL]
-
-    # ----- Step 2: Optional filters (with two filtering methods) -----
-    st.subheader("Step 1: (Optional) Filter metadata")
-
-    tab1, tab2, tab3= st.tabs(["Manual Selection", "Natural Language", "View Available Sample Values"])
-
-    with tab1:
-        st.markdown("### Manual Filter Selection")
-        selected_cols = st.multiselect("Filter by columns:", filterable_columns, key="deg_filter_cols")
-        deg_filters = {}
-        for col in selected_cols:
-            if col in unique_vals:
-                vals = st.multiselect(f"Values for {col}:", unique_vals[col], key=f"deg_vals_{col}")
-                if vals:
-                    deg_filters[col] = vals
-        if "Dose" in deg_filters and "Treatment" in deg_filters and "Vehicle" in deg_filters["Treatment"]:
-            deg_filters["Dose"].append("Vehicle")
-
-        # Preview filters in Tab 1
-        if deg_filters:
-            st.markdown("#### Filter Preview")
-            preview_cols = st.columns(len(deg_filters))
-            for idx, (col_name, values) in enumerate(deg_filters.items()):
-                with preview_cols[idx]:
-                    st.metric(col_name, len(values), f"values selected")
-                    st.caption(", ".join([str(v)[:20] for v in values[:3]]) + ("..." if len(values) > 3 else ""))
-            # Only update session state if filters are actually selected
-            st.session_state["deg_filters"] = deg_filters
-        else:
-            st.caption("No filters applied - all samples will be included")
-
-    with tab2:
-        st.markdown("### Natural Language Filter")
-        st.caption("Describe what samples you want in natural language")
-        st.caption("Note: This is an experimental feature and may not work as expected all the time.")
-        st.write(":red[When building a query mention what samples you want to use as control samples!]")
-        user_description = st.text_area(
-            "Example query: Give me WT or TDP43 iMNs treated with Rotenone at any timepoint excluding 96 hr",
-            key=f"deg_nl_filter_input_{st.session_state.get('deg_nl_filter_input_reset', 0)}",
-            height=80,
-            placeholder="Type your filter description here..."
-        )
-
-        col_nl1, col_nl2 = st.columns(2)
-        with col_nl1:
-            generate_btn = st.button("🤖 Generate Filters from Description", key="deg_gen_filters_btn")
-        with col_nl2:
-            clear_nl_btn = st.button("Clear", key="deg_clear_nl_btn")
-
-        if clear_nl_btn:
-            st.session_state["deg_nl_filters"] = {}
-            #st.session_state["deg_nl_filter_input"] = ""
-            st.session_state["deg_nl_filter_input_reset"] = st.session_state.get("deg_nl_filter_input_reset", 0) + 1
-            st.rerun()
-
-        if generate_btn:
-            if not user_description.strip():
-                st.warning("Please enter a filter description")
-            else:
-                with st.spinner("🔍 Generating filters..."):
-                    generated_filters = natural_language_to_filters(user_description, schema)
-                    st.session_state["deg_nl_filters"] = generated_filters
-                    st.rerun()
-
-        # Show generated filters
-        nl_filters = st.session_state.get("deg_nl_filters", {})
-
-        if nl_filters:
-            st.markdown("#### Generated Filters")
-
-            # Display filter cards
-            filter_cols = st.columns(min(3, len(nl_filters)) if nl_filters else 1)
-            for idx, (col_name, values) in enumerate(nl_filters.items()):
-                with filter_cols[idx % 3]:
-                    st.info(f"**{col_name}**\n{len(values)} value(s) selected")
-                    st.caption(", ".join([str(v)[:15] for v in values[:5]]) + ("..." if len(values) > 5 else ""))
-
-
-            st.write(":red[Click Apply These Filters to load metadata table based on AI generated filters]")
-            # Apply button
-            if st.button("✓ Apply These Filters", key="deg_apply_nl_filters"):
-                st.success("Filters applied!")
-                st.session_state["deg_filters"] = nl_filters
-        else:
-            st.caption("Generated filters will appear here")
-    
-    with tab3:
-        st.markdown("### View Available Metadata Values")
-        vals_to_view = ["Genotype", "Treatment2", "Timepoint", "Treatment","Dose", "CellType", "Maturity"]
-        for val in vals_to_view:
-            values = sorted(unique_vals[val])
-            with st.expander(f"{val} ({len(values)} unique)"):
-                st.write(values)
-        
-
-    # ----- Step 3: Load metadata table -----
-    st.subheader("Step 2: Load metadata table")
-    if st.button("Load metadata table"):
-        try:
-            # Get filters from session state (set by either tab)
-            applied_filters = st.session_state.get("deg_filters", {})
-            payload = {"filters": applied_filters}
-            resp = requests.post(f"{api_url}get_samples/", json=payload, timeout=60)
-            resp.raise_for_status()
-            buf = io.BytesIO(resp.content)
-            meta = pd.read_feather(buf)
-            if SAMPLE_COL not in meta.columns:
-                st.error(f"Metadata has no column '{SAMPLE_COL}'.")
-            else:
-                meta = meta.copy()
-                meta["Select"] = False
-                cols_ordered = ["Select"] + [c for c in meta.columns if c != "Select"]
-                st.session_state["deg_metadata_df"] = meta[cols_ordered]
-                st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
-                st.success("Metadata loaded.")
-                st.rerun()
-        except Exception as e:
-            st.error(f"Failed to load metadata: {e}")
-
-    meta_df = st.session_state["deg_metadata_df"]
+    meta_df = render_filter_and_data_steps(
+        keys=keys,
+        wk=wk,
+        api_url=api_url,
+        schema=schema,
+        render_step_header=_render_step_header,
+    )
     if meta_df is None:
-        st.info("Configure filters (or leave empty for all) and click 'Load metadata table'.")
         return
 
-    # Keep Select column first (leftmost); migrate once if needed
-    if "Select" in meta_df.columns and meta_df.columns[0] != "Select":
-        cols_ordered = ["Select"] + [c for c in meta_df.columns if c != "Select"]
-        meta_df = meta_df[cols_ordered]
-        st.session_state["deg_metadata_df"] = meta_df
-
     # ----- Step 4: Select samples and assign to groups -----
-    st.subheader("Step 3: Select samples and assign to Comparison Group or Reference Group")
+    _render_step_header(
+        4,
+        "Assign Samples to Comparison and Reference Groups",
+        "Select rows in the table, then add them to either group.",
+        optional=False,
+    )
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("Select all rows", key="deg_select_all"):
-            df = st.session_state["deg_metadata_df"].copy()
+        if st.button("Select all rows", key=wk("select_all")):
+            df = st.session_state[keys["metadata_df"]].copy()
             df["Select"] = True
-            st.session_state["deg_metadata_df"] = df
-            st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+            st.session_state[keys["metadata_df"]] = df
+            st.session_state[keys["editor_reset"]] = st.session_state.get(keys["editor_reset"], 0) + 1
             st.rerun()
     with col2:
-        if st.button("Clear selection", key="deg_clear_all"):
-            df = st.session_state["deg_metadata_df"].copy()
+        if st.button("Clear selection", key=wk("clear_all")):
+            df = st.session_state[keys["metadata_df"]].copy()
             df["Select"] = False
-            st.session_state["deg_metadata_df"] = df
-            st.session_state["deg_editor_reset"] = st.session_state.get("deg_editor_reset", 0) + 1
+            st.session_state[keys["metadata_df"]] = df
+            st.session_state[keys["editor_reset"]] = st.session_state.get(keys["editor_reset"], 0) + 1
             st.rerun()
-    
 
-    editor_key = f"deg_data_editor_{st.session_state.get('deg_editor_reset', 0)}"
+    editor_key = f"{wk('data_editor')}_{st.session_state.get(keys['editor_reset'], 0)}"
     edited = st.data_editor(
         meta_df,
         column_config={"Select": st.column_config.CheckboxColumn("Select", default=False)},
@@ -256,33 +212,65 @@ def run_group_selection():
     # Don't sync edited back to session state - avoids checkbox double-click bug
     # Session state is only updated on load or when we reset Select (add/clear group)
 
-    if st.session_state.get("deg_dup_warning"):
-        st.warning(st.session_state["deg_dup_warning"])
-        st.session_state["deg_dup_warning"] = None
+    if st.session_state.get(keys["dup_warning"]):
+        st.warning(st.session_state[keys["dup_warning"]])
+        st.session_state[keys["dup_warning"]] = None
 
     GROUP_WINDOW_HEIGHT = 220
 
     col1, col2 = st.columns(2)
     with col1:
-        st.button("Add selected → Comparison Group", on_click=add_to_group, args=(edited, "deg_group_a", "deg_group_b"), key="add_grp_a")
+        st.button(
+            "Add selected → Comparison Group",
+            on_click=add_to_group,
+            args=(edited, keys["group_a"], keys["group_b"]),
+            kwargs={
+                "metadata_df_key": keys["metadata_df"],
+                "editor_reset_key": keys["editor_reset"],
+                "dup_warning_key": keys["dup_warning"],
+            },
+            key=wk("add_grp_a"),
+        )
         st.markdown("**Comparison Group**")
         with st.container(height=GROUP_WINDOW_HEIGHT):
             if not ga:
                 st.caption("No samples yet.")
             else:
                 for i, s in enumerate(ga):
-                    st.button(f"✕ {s}", key=f"rm_a_{i}_{s}", on_click=remove_from_group, args=("deg_group_a", s))
-        st.button("Clear Comparison Group", on_click=clear_group, args=("deg_group_a",))
+                    st.button(f"✕ {s}", key=wk(f"rm_a_{i}_{s}"), on_click=remove_from_group, args=(keys["group_a"], s))
+        st.button(
+            "Clear Comparison Group",
+            on_click=clear_group,
+            args=(keys["group_a"],),
+            kwargs={"metadata_df_key": keys["metadata_df"], "editor_reset_key": keys["editor_reset"]},
+            key=wk("clear_grp_a"),
+        )
     with col2:
-        st.button("Add selected → Reference Group", on_click=add_to_group, args=(edited, "deg_group_b", "deg_group_a"), key="add_grp_b")
+        st.button(
+            "Add selected → Reference Group",
+            on_click=add_to_group,
+            args=(edited, keys["group_b"], keys["group_a"]),
+            kwargs={
+                "metadata_df_key": keys["metadata_df"],
+                "editor_reset_key": keys["editor_reset"],
+                "dup_warning_key": keys["dup_warning"],
+            },
+            key=wk("add_grp_b"),
+        )
         st.markdown("**Reference Group**")
         with st.container(height=GROUP_WINDOW_HEIGHT):
             if not gb:
                 st.caption("No samples yet.")
             else:
                 for i, s in enumerate(gb):
-                    st.button(f"✕ {s}", key=f"rm_b_{i}_{s}", on_click=remove_from_group, args=("deg_group_b", s))
-        st.button("Clear Reference Group", on_click=clear_group, args=("deg_group_b",))
+                    st.button(f"✕ {s}", key=wk(f"rm_b_{i}_{s}"), on_click=remove_from_group, args=(keys["group_b"], s))
+        st.button(
+            "Clear Reference Group",
+            on_click=clear_group,
+            args=(keys["group_b"],),
+            kwargs={"metadata_df_key": keys["metadata_df"], "editor_reset_key": keys["editor_reset"]},
+            key=wk("clear_grp_b"),
+        )
 
     st.caption(f"Comparison Group: {len(ga)} samples · Reference Group: {len(gb)} samples")
 
@@ -297,7 +285,7 @@ def run_group_selection():
 
         llm_query = st.text_area(
             "Query",
-            key="deg_llm_group_query",
+            key=wk("llm_group_query"),
             height=80,
             placeholder="e.g. Add TDP43 Vehicle controls to Reference Group",
             label_visibility="collapsed",
@@ -305,10 +293,10 @@ def run_group_selection():
 
         col_llm1, col_llm2 = st.columns([2, 1])
         with col_llm1:
-            ask_btn = st.button("🤖 Ask AI to Add Samples", key="deg_llm_group_btn")
+            ask_btn = st.button("🤖 Ask AI to Add Samples", key=wk("llm_group_btn"))
         with col_llm2:
-            if st.button("Clear AI result", key="deg_llm_clear_btn"):
-                st.session_state.pop("deg_llm_group_result", None)
+            if st.button("Clear AI result", key=wk("llm_clear_btn")):
+                st.session_state.pop(keys["llm_group_result"], None)
                 st.rerun()
 
         if ask_btn:
@@ -318,7 +306,7 @@ def run_group_selection():
                 with st.spinner("Asking AI…"):
                     result = natural_language_group_assignment(
                         llm_query,
-                        st.session_state["deg_metadata_df"],
+                        st.session_state[keys["metadata_df"]],
                         st.session_state["deg_schema"],
                     )
                 if result["error"]:
@@ -328,16 +316,26 @@ def run_group_selection():
                     res_b = result["group_b"]
                     added_a, added_b = [], []
                     if res_a["samples"]:
-                        added_a = add_samples_to_group(res_a["samples"], "deg_group_a", "deg_group_b") or []
+                        added_a = add_samples_to_group(
+                            res_a["samples"],
+                            keys["group_a"],
+                            keys["group_b"],
+                            dup_warning_key=keys["dup_warning"],
+                        ) or []
                     if res_b["samples"]:
-                        added_b = add_samples_to_group(res_b["samples"], "deg_group_b", "deg_group_a") or []
-                    st.session_state["deg_llm_group_result"] = {
+                        added_b = add_samples_to_group(
+                            res_b["samples"],
+                            keys["group_b"],
+                            keys["group_a"],
+                            dup_warning_key=keys["dup_warning"],
+                        ) or []
+                    st.session_state[keys["llm_group_result"]] = {
                         "group_a": {"filters": res_a["filters"], "matched": res_a["samples"], "added": added_a},
                         "group_b": {"filters": res_b["filters"], "matched": res_b["samples"], "added": added_b},
                     }
                     st.rerun()
 
-        llm_result = st.session_state.get("deg_llm_group_result")
+        llm_result = st.session_state.get(keys["llm_group_result"])
         if llm_result:
             def _show_group_result(label, data):
                 filters = data["filters"]
@@ -363,7 +361,12 @@ def run_group_selection():
             _show_group_result("Reference Group", llm_result["group_b"])
 
     # ----- Step 5: Submit to backend -----
-    st.subheader("Step 4: Send groups to backend")
+    _render_step_header(
+        5,
+        "Run DEG Analysis",
+        "Submit both groups to backend and generate DEG results and visualizations.",
+        optional=False,
+    )
     if st.button("Submit groups for DEG analysis", type="primary"):
         if not ga or not gb:
             st.warning("Both groups must have at least one sample.")
@@ -381,22 +384,22 @@ def run_group_selection():
                     data = resp.content
                     buf = io.BytesIO(data)
                     # Response is ZIP (deg_analysis.feather + optional heatmap + GSEA) or legacy single feather
-                    st.session_state["deg_heatmap_df"] = None
-                    st.session_state["deg_heatmap_annotation_df"] = None
-                    st.session_state["deg_gsea_df"] = None
+                    st.session_state[keys["heatmap_df"]] = None
+                    st.session_state[keys["heatmap_annotation_df"]] = None
+                    st.session_state[keys["gsea_df"]] = None
                     try:
                         with zipfile.ZipFile(buf, "r") as zf:
-                            st.session_state["deg_results_df"] = pd.read_feather(io.BytesIO(zf.read("deg_analysis.feather")))
+                            st.session_state[keys["results_df"]] = pd.read_feather(io.BytesIO(zf.read("deg_analysis.feather")))
                             if "heatmap_matrix.csv" in zf.namelist():
                                 hm = pd.read_csv(io.BytesIO(zf.read("heatmap_matrix.csv")), index_col=0)
-                                st.session_state["deg_heatmap_df"] = hm
+                                st.session_state[keys["heatmap_df"]] = hm
                             if "heatmap_annotation.csv" in zf.namelist():
-                                st.session_state["deg_heatmap_annotation_df"] = pd.read_csv(io.BytesIO(zf.read("heatmap_annotation.csv")))
+                                st.session_state[keys["heatmap_annotation_df"]] = pd.read_csv(io.BytesIO(zf.read("heatmap_annotation.csv")))
                             if "gsea_results.csv" in zf.namelist():
-                                st.session_state["deg_gsea_df"] = pd.read_csv(io.BytesIO(zf.read("gsea_results.csv")))
+                                st.session_state[keys["gsea_df"]] = pd.read_csv(io.BytesIO(zf.read("gsea_results.csv")))
                     except zipfile.BadZipFile:
                         buf.seek(0)
-                        st.session_state["deg_results_df"] = pd.read_feather(buf)
+                        st.session_state[keys["results_df"]] = pd.read_feather(buf)
                     st.rerun()
                 except requests.exceptions.RequestException as e:
                     try:
@@ -408,5 +411,9 @@ def run_group_selection():
                     st.error(f"Submit failed: {e}")
 
     # Show DEG results and visualizations from last successful run
-    if st.session_state.get("deg_results_df") is not None:
-        render_deg_results_and_visualizations(st.session_state["deg_results_df"])
+    if st.session_state.get(keys["results_df"]) is not None:
+        render_deg_results_and_visualizations(
+            st.session_state[keys["results_df"]],
+            state_prefix=keys["state_prefix"],
+            widget_prefix=keys["widget_prefix"],
+        )
