@@ -31,6 +31,11 @@ def get_all_metadata_values():
         if col != "SampleName" and col != "_id":
             columns.append(col)
     
+    for col in columns:
+        vals = df[col].dropna().unique().tolist()
+        types = {type(v) for v in vals}
+        if len(types) > 1:
+            print(col, types)
 
     unique_vals = {
         col: sorted(df[col].dropna().unique().tolist())
@@ -202,13 +207,19 @@ def get_counts_subset(sample_names):
 
     return out
 
+def get_run_metadata(sample_names):
+    docs = list(collection.find({"SampleName": {"$in": sample_names}}))
+    df = pd.DataFrame(docs)
+    return df[["SampleName", "Run"]]
+
+
 
 async def update_database(counts_data, metadata):
     # Step 1 — Read uploaded Feather files into DataFrames
     counts_df = pd.read_feather(io.BytesIO(await counts_data.read()))
     metadata_df = pd.read_feather(io.BytesIO(await metadata.read()))
 
-    # Step 2 — Save metadata rows to MongoDB
+    #Step 2 — Save metadata rows to MongoDB
     # meta_dic = metadata_df.to_dict(orient="records")
     # collection.insert_many(meta_dic)
 

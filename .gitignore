@@ -1,5 +1,6 @@
 # Environment and secrets — never commit
 .env
 backend/.env
+backend/.DS_Store
 *.pem
 .streamlit/secrets.toml

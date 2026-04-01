@@ -146,7 +146,8 @@ class ResearchPipeline:
     def predict_disease_associations(
         self,
         deg_analysis: DEGAnalysis,
-        num_genes: int = 10
+        num_genes: int = 10,
+        comparison_description: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate disease association predictions."""
         if not self.predictor:
@@ -163,7 +164,8 @@ class ResearchPipeline:
             genes=genes_data,
             biological_context=context,
             disease_context=deg_analysis.disease_context,
-            tissue=deg_analysis.tissue
+            tissue=deg_analysis.tissue,
+            comparison_description=comparison_description,
         )
 
         return predictions
@@ -171,7 +173,8 @@ class ResearchPipeline:
     def predict_drug_response(
         self,
         deg_analysis: DEGAnalysis,
-        num_genes: int = 10
+        num_genes: int = 10,
+        comparison_description: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate drug response predictions."""
         if not self.predictor:
@@ -187,7 +190,8 @@ class ResearchPipeline:
         predictions = self.predictor.predict_drug_response(
             genes=genes_data,
             biological_context=context,
-            disease_context=deg_analysis.disease_context
+            disease_context=deg_analysis.disease_context,
+            comparison_description=comparison_description,
         )
 
         return predictions
@@ -195,7 +199,8 @@ class ResearchPipeline:
     def generate_hypotheses(
         self,
         deg_analysis: DEGAnalysis,
-        num_genes: int = 10
+        num_genes: int = 10,
+        comparison_description: Optional[str] = None,
     ) -> Optional[Dict]:
         """Generate novel research hypotheses."""
         if not self.predictor:
@@ -211,7 +216,8 @@ class ResearchPipeline:
         hypotheses = self.predictor.generate_research_hypothesis(
             genes=genes_data,
             biological_context=context,
-            disease_context=deg_analysis.disease_context
+            disease_context=deg_analysis.disease_context,
+            comparison_description=comparison_description,
         )
 
         return hypotheses
@@ -221,7 +227,8 @@ class ResearchPipeline:
         deg_df: pd.DataFrame,
         disease_context: str = None,
         tissue: str = None,
-        num_genes: int = 10
+        num_genes: int = 10,
+        comparison_description: str = None,
     ) -> Dict:
         """
         Run complete analysis pipeline from pre-computed DEG results.
@@ -245,6 +252,7 @@ class ResearchPipeline:
             "total_genes": len(deg_analysis.degs),
             "disease_context": disease_context,
             "tissue": tissue,
+            "comparison_description": comparison_description,
             "deg_data": deg_analysis.to_dict()
         }
 
@@ -259,17 +267,17 @@ class ResearchPipeline:
                 logger.info("Running LLM predictions...")
 
                 # Disease associations
-                disease_pred = self.predict_disease_associations(deg_analysis, num_genes)
+                disease_pred = self.predict_disease_associations(deg_analysis, num_genes, comparison_description)
                 if disease_pred:
                     results["disease_predictions"] = disease_pred
 
                 # Drug response
-                drug_pred = self.predict_drug_response(deg_analysis, num_genes)
+                drug_pred = self.predict_drug_response(deg_analysis, num_genes, comparison_description)
                 if drug_pred:
                     results["drug_predictions"] = drug_pred
 
                 # Research hypotheses
-                hyp = self.generate_hypotheses(deg_analysis, num_genes)
+                hyp = self.generate_hypotheses(deg_analysis, num_genes, comparison_description)
                 if hyp:
                     results["research_hypotheses"] = hyp
 

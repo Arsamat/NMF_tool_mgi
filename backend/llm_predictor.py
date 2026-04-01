@@ -24,7 +24,8 @@ class BiomedicalPredictor:
         genes: List[Dict],
         biological_context: str,
         disease_context: str = None,
-        tissue: str = None
+        tissue: str = None,
+        comparison_description: Optional[str] = None,
     ) -> Dict:
         """
         Predict how genes could affect diseases based on expression changes.
@@ -55,6 +56,7 @@ DIFFERENTIAL EXPRESSION RESULTS:
 
 Disease Context: {disease_context or 'General analysis'}
 Tissue: {tissue or 'Not specified'}
+Comparison Description: {comparison_description or 'Not specified'}
 
 Based on these genes and their expression changes, provide a focused analysis:
 
@@ -102,7 +104,8 @@ CRITICAL INSTRUCTIONS:
         self,
         genes: List[Dict],
         biological_context: str,
-        disease_context: str = None
+        disease_context: str = None,
+        comparison_description: Optional[str] = None,
     ) -> Dict:
         """
         Predict potential drug response based on gene expression changes.
@@ -120,6 +123,8 @@ You are a biomedical informatics expert specializing in pharmacogenomics.
 
 DIFFERENTIAL EXPRESSION IN {disease_context or 'Patient Sample'}:
 {gene_list}
+
+Comparison Description: {comparison_description or 'Not specified'}
 
 Provide focused drug response predictions:
 
@@ -166,7 +171,8 @@ CRITICAL INSTRUCTIONS:
         self,
         genes: List[Dict],
         biological_context: str,
-        disease_context: str = None
+        disease_context: str = None,
+        comparison_description: Optional[str] = None,
     ) -> Dict:
         """
         Generate novel research hypotheses from DEG results.
@@ -186,6 +192,7 @@ DIFFERENTIAL EXPRESSION RESULTS:
 {gene_list}
 
 Disease/Context: {disease_context or 'Unknown'}
+Comparison Description: {comparison_description or 'Not specified'}
 
 Propose 2-3 novel, scientifically grounded research hypotheses:
 

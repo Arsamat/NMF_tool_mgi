@@ -7,6 +7,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "2"
 
 import multiprocessing
 multiprocessing.set_start_method("spawn", force=True)
+
 from fastapi import FastAPI, UploadFile, Form, File, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 import pandas as pd
@@ -27,7 +28,14 @@ from utils.nmf_utils import run_regular_nmf_util, run_cnmf_utils, cleanup_after_
 from utils.extra_utils import gpt_utils
 from utils.s3_utils import create_url, create_preprocessed_url, download_data_util
 from utils.deg_utils import run_deg_analysis
-from research_pipeline import ResearchPipeline
+from utils.research_utils import run_deg_with_research_pipeline
+from utils.hypothesis_utils import validate_hypotheses_claude_service
+from utils.results_map_utils import (
+    get_experiments,
+    get_groups_for_experiment,
+    get_terms_for_group,
+    fetch_deg_results_from_s3,
+)
 from fastapi import Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,7 +90,7 @@ def global_exception_handler(request: Request, exc: Exception):
         content={
             "error_id": error_id,
             "message": summary,
-            "details": "This issue has been logged for review.",
+            "details": "This issue has been logged for review."
         },
     )
 
@@ -494,6 +502,11 @@ class DEGGroupsRequest(BaseModel):
     group_b: list[str]
 
 
+class DEGGroupsRequest(BaseModel):
+    group_a: list[str]
+    group_b: list[str]
+
+
 class DEGResearchRequest(BaseModel):
     disease_context: str = "Unknown"
     tissue: str = "Unknown"
@@ -527,7 +540,8 @@ async def deg_with_research(
     deg_table: UploadFile = File(...),
     disease_context: str = Form("Unknown"),
     tissue: str = Form("Unknown"),
-    num_genes: int = Form(10)
+    num_genes: int = Form(10),
+    comparison_description: str = Form("Unknown")
 ):
     """
     Generate research insights from pre-computed DEG results.
@@ -550,62 +564,25 @@ async def deg_with_research(
         JSON with DEG results, biological context, and research insights
     """
     try:
-        print(f"Starting research insights pipeline...")
+        print("Starting research insights pipeline...")
         print(f"  Disease: {disease_context}")
         print(f"  Tissue: {tissue}")
         print(f"  Top genes to analyze: {num_genes}")
 
         # Read DEG table from uploaded file
         deg_bytes = await deg_table.read()
-        deg_df = pd.read_csv(io.BytesIO(deg_bytes))
 
-        print(f"Loaded DEG table: {deg_df.shape}")
-        print(f"Columns: {list(deg_df.columns)}")
-
-        # Validate and map required columns
-        col_aliases = {
-            "gene": ["gene", "Gene", "GENE", "SYMBOL", "ENSEMBLID", "ensemblid"],
-            "log2fc": ["log2fc", "logFC", "log2FC", "Log2FC", "log2FoldChange", "logFoldChange"],
-            "padj": ["padj", "adj.P.Val", "adjustedPvalue", "adjusted_pvalue", "p.adjust"]
-        }
-
-        available_cols = set(deg_df.columns)
-        col_mapping = {}
-
-        for req_col, aliases in col_aliases.items():
-            found = False
-            for alias in aliases:
-                if alias in available_cols:
-                    col_mapping[alias] = req_col
-                    found = True
-                    break
-            if not found:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "detail": f"Missing required column for '{req_col}'. Expected one of: {aliases}. Available columns: {list(available_cols)}"
-                    },
-                )
-
-        if col_mapping:
-            deg_df = deg_df.rename(columns=col_mapping)
-
-        pipeline = ResearchPipeline()
-        results = pipeline.full_analysis(
-            deg_df=deg_df,
+        # Delegate to shared service function
+        response = run_deg_with_research_pipeline(
+            deg_bytes=deg_bytes,
             disease_context=disease_context,
             tissue=tissue,
-            num_genes=num_genes
+            num_genes=num_genes,
+            comparison_description=comparison_description
         )
 
-        print(f"Analysis complete. Total genes analyzed: {results.get('total_genes', 0)}")
-
-        return JSONResponse(
-            status_code=200,
-            content=results
-        )
-
+        print("Analysis complete.")
+        return response
     except Exception as e:
         error_msg = str(e)
         print(f"Error in /deg_with_research: {error_msg}")
@@ -702,3 +679,75 @@ def complete_multipart_upload(req: CompleteMultipartRequest):
         MultipartUpload={"Parts": req.parts},
     )
     return {"location": resp.get("Location"), "etag": resp.get("ETag")}
+
+
+# ===== Hypothesis Validation Endpoints =====
+
+class HypothesisValidationRequest(BaseModel):
+    """Request model for hypothesis validation."""
+    hypotheses: list  # List of hypothesis strings
+    max_papers: int = 10  # Max papers to search per hypothesis
+
+
+@app.post("/validate_hypotheses_claude/")
+def validate_hypotheses_claude(req: HypothesisValidationRequest):
+    """
+    Validate multiple hypotheses against PubMed literature using Claude-based agent.
+
+    Returns novelty assessments and reasoning for each hypothesis.
+    """
+    try:
+        return validate_hypotheses_claude_service(
+            hypotheses=req.hypotheses,
+            max_papers=req.max_papers,
+        )
+    except Exception as e:
+        print(f"Claude hypothesis validation error: {e}")
+        return {
+            "error": str(e),
+            "results": [],
+        }
+
+
+# ===== Precomputed DEG Results Endpoints =====
+
+class DEGResultsGroupsRequest(BaseModel):
+    experiment: str
+
+
+class DEGResultsTermsRequest(BaseModel):
+    experiment: str
+    group: str
+
+
+class DEGResultsFetchRequest(BaseModel):
+    experiment: str
+    output_dir: str
+    de_csv_path: str
+    gsea_barplot_path: str = ""
+
+
+@app.get("/deg_results/experiments")
+def list_deg_experiments():
+    """Return sorted list of unique experiments in the precomputed results map."""
+    return {"experiments": get_experiments()}
+
+
+@app.post("/deg_results/groups")
+def list_deg_groups(req: DEGResultsGroupsRequest):
+    """Return one summary row per unique group for the given experiment."""
+    return {"groups": get_groups_for_experiment(req.experiment)}
+
+
+@app.post("/deg_results/terms")
+def list_deg_terms(req: DEGResultsTermsRequest):
+    """Return available interaction terms (term_labels) for an experiment + group."""
+    return {"terms": get_terms_for_group(req.experiment, req.group)}
+
+
+@app.post("/deg_results/fetch_csv")
+def fetch_precomputed_deg_results(req: DEGResultsFetchRequest):
+    """Fetch DEG CSV + GSEA barplot PNG from S3, returned as a ZIP."""
+    return fetch_deg_results_from_s3(
+        req.experiment, req.output_dir, req.de_csv_path, req.gsea_barplot_path
+    )

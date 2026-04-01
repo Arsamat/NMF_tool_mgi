@@ -548,9 +548,6 @@ async def single_cell_util(
 
     if not gene_symbols:
         df_expr = transform_ids(df_expr, gene_column)
-    else: 
-        df_expr = df_expr.T
-        
     print(df_expr.columns)
 
     if gene_column in df_expr.columns:

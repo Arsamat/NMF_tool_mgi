@@ -307,12 +307,13 @@ def run_experiment_browser():
     if pre_btn:
         st.session_state["deg_experiment_browser_precomputed"] = True
         # Skip the experiment list; jump directly to the groups for this experiment
-        st.session_state["deg_pre_view"] = "groups"
-        st.session_state["deg_pre_experiment"] = selected_experiment
-        st.session_state["deg_pre_group_data"] = None
-        st.session_state["deg_pre_terms"] = None
-        st.session_state["deg_pre_deg_df"] = None
-        st.session_state["deg_pre_loaded_key"] = None
+        st.session_state["deg_precomputed_view"] = "groups"
+        st.session_state["deg_precomputed_experiment"] = selected_experiment
+        st.session_state["deg_precomputed_group_data"] = None
+        st.session_state["deg_precomputed_terms"] = None
+        st.session_state["deg_precomputed_deg_df"] = None
+        st.session_state["deg_precomputed_loaded_key"] = None
+        st.session_state["deg_precomputed_selected_term"] = None
         st.rerun()
 
     if dl_btn:

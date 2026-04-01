@@ -31,6 +31,11 @@ def get_all_metadata_values():
         if col != "SampleName" and col != "_id":
             columns.append(col)
     
+    for col in columns:
+        vals = df[col].dropna().unique().tolist()
+        types = {type(v) for v in vals}
+        if len(types) > 1:
+            print(col, types)
 
     unique_vals = {
         col: sorted(df[col].dropna().unique().tolist())
@@ -196,7 +201,7 @@ def get_counts_subset(sample_names):
         return pd.DataFrame()
 
     out = pd.concat(dfs, axis=1).fillna(0)
-    out = out.T.groupby(level=0).sum().T  # collapse duplicate sample columns across shards
+    out = out.groupby(level=0, axis=1).sum()  # collapse duplicate sample columns across shards
     idx_name = out.index.name or "index"   # pandas uses "index" if None when resetting
     out = out.reset_index().rename(columns={idx_name: "Geneid"})
 
@@ -208,7 +213,7 @@ async def update_database(counts_data, metadata):
     counts_df = pd.read_feather(io.BytesIO(await counts_data.read()))
     metadata_df = pd.read_feather(io.BytesIO(await metadata.read()))
 
-    # Step 2 — Save metadata rows to MongoDB
+    #Step 2 — Save metadata rows to MongoDB
     # meta_dic = metadata_df.to_dict(orient="records")
     # collection.insert_many(meta_dic)
 
