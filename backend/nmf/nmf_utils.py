@@ -12,17 +12,17 @@ import zipfile
 from fastapi import FastAPI, UploadFile, Form, File, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 import os
-from NMF import do_NMF
+from nmf.NMF import do_NMF
 import tempfile
-from cNMF import cNMF_consensus
-from save_heatmap_pdf_ordered import save_heatmap_pdf_ordered
+from nmf.cNMF import cNMF_consensus
+from nmf.save_heatmap_pdf_ordered import save_heatmap_pdf_ordered
 from starlette.background import BackgroundTask
 import shutil
-from NMF import do_NMF,  preprocess2
+from nmf.NMF import do_NMF, preprocess2
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor, as_completed
 import time
 import random
-from group_associations import run_module_group_analysis
+from nmf.group_associations import run_module_group_analysis
 import boto3
 from fastapi import HTTPException
 from pybiomart import Dataset

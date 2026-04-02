@@ -1,7 +1,7 @@
 # spearman_engine.py
 import numpy as np
 import pandas as pd
-from NMF import do_NMF
+from nmf.NMF import do_NMF
 
 def spearman_pairs_from_H(df_h: pd.DataFrame, use_abs: bool = False):
     """

@@ -8,10 +8,13 @@ from typing import Dict, List, Optional
 import tempfile
 import subprocess
 import os
+from pathlib import Path
 
-from deg_parser import DEGAnalysis, DEGResult
-from literature_retriever import LiteratureRetriever
-from llm_predictor import BiomedicalPredictor
+import deg as _deg_pkg
+
+from research.deg_parser import DEGAnalysis, DEGResult
+from research.literature_retriever import LiteratureRetriever
+from research.llm_predictor import BiomedicalPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +72,7 @@ class ResearchPipeline:
         counts_subset = counts_df[[c for c in count_cols if c in counts_df.columns]].copy()
         counts_subset = counts_subset.rename(columns={gene_col: "gene"})
 
-        # Find R script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_dir = str(Path(_deg_pkg.__file__).resolve().parent)
         r_script = os.path.join(script_dir, "deg_analysis.R")
         if not os.path.isfile(r_script):
             raise FileNotFoundError(f"DEG R script not found: {r_script}")

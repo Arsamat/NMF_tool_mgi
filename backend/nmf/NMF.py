@@ -27,13 +27,16 @@ from sklearn.utils.extmath import randomized_svd
 import math
 import tempfile
 import pyarrow.parquet as pq
+from pathlib import Path
+
+_NMF_DIR = Path(__file__).resolve().parent
 
 
 #function to transform ensembl ids to symbol ids
 def transform_ids(df_link, gene_column, symbols):
     #dataset = Dataset(name='hsapiens_gene_ensembl',
     #                 host='http://www.ensembl.org')
-    genes = pd.read_csv("./gene_maps.csv")
+    genes = pd.read_csv(_NMF_DIR / "gene_maps.csv")
     delimiter = detect_delimiter(df_link)
 
 
@@ -98,7 +101,7 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
 
     cmd = [
         "Rscript",
-        "./filter_batch.R",  # path to your R script
+        str(_NMF_DIR / "filter_batch.R"),
         new_path,
         metadata_link,
         out_dir,
@@ -107,9 +110,9 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
         str(hvg),
         str(batch).upper(),
         batch_column,
-        *map(str, batch_include)
+        *map(str, batch_include),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(_NMF_DIR))
     print("R script STDOUT:\n", result.stdout)
     print("R script STDERR:\n", result.stderr)
 

@@ -1,45 +1,39 @@
-import pandas as pd
 import io
-from fastapi.responses import JSONResponse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from llm_request_functions import model_request
-from fastapi.encoders import jsonable_encoder
 
-#break data into chunks to send to chatGPT
+import pandas as pd
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+
+from infra.llm_request_functions import model_request
+
+
 def break_chunks(genes, size):
     for i in range(0, len(genes), size):
-        yield genes[i: i + size]
+        yield genes[i : i + size]
 
-#Make request to ChatGPT to summarise gene functions
-async def gpt_utils(
-    file,
-    top_n
-):
-    # Read feather file into DataFrame
+
+async def gpt_utils(file, top_n):
     content = await file.read()
     df = pd.read_feather(io.BytesIO(content))
     if df is not None:
         if df.columns[0] == "Module":
             tmp = list(df["Module"])
             modules = ["Module_" + str(x) for x in tmp]
-            df = df.drop("Module", axis= 1)
+            df = df.drop("Module", axis=1)
             df = df.T
             df = df.reset_index()
             df = df.rename(columns={df.columns[0]: "Gene"})
             df.columns = ["Gene"] + modules
 
         else:
-            modules = list(df.index.astype(str)) 
+            modules = list(df.index.astype(str))
             df = df.T
             df = df.reset_index()
             df = df.rename(columns={df.columns[0]: "Gene"})
             df.columns = ["Gene"] + modules
-    
+
     print(df.head)
-
-
-    #if "Gene" not in df.columns:
-     #   return JSONResponse(status_code=400, content={"error": "DataFrame must have a 'Gene' column"})
 
     hmap = {}
     all_top_genes = set()
@@ -51,7 +45,6 @@ async def gpt_utils(
         hmap[module] = tmp
         all_top_genes.update(tmp["Gene"])
 
-    # Parallel API calls
     output = {}
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(model_request, batch) for batch in break_chunks(list(all_top_genes), 20)]
@@ -62,7 +55,6 @@ async def gpt_utils(
             except Exception as e:
                 print("API error:", e)
 
-    # Attach descriptions back to each module
     results = {}
     for module, tmp in hmap.items():
         tmp = tmp.copy()

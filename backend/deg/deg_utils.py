@@ -5,13 +5,15 @@ feather + optional heatmap and GSEA CSVs).
 """
 import io
 import os
-import tempfile
 import subprocess
+import tempfile
 import zipfile
+from pathlib import Path
+
 import pandas as pd
 from fastapi.responses import StreamingResponse
 
-from utils.db_utils import get_counts_subset, get_run_metadata
+from infra.db_utils import get_counts_subset, get_run_metadata
 
 
 def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingResponse:
@@ -33,14 +35,12 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
     counts_df = get_counts_subset(sample_names)
     batch_metadata = get_run_metadata(sample_names)
 
-
     if counts_df is None or (isinstance(counts_df, dict) and not counts_df):
         raise ValueError("No count data found for the specified samples")
 
     if isinstance(counts_df, dict):
         counts_df = pd.DataFrame(counts_df)
 
-    # Build metadata: SampleName, Group (GroupA/GroupB)
     meta_rows = []
     for s in group_a:
         meta_rows.append({"SampleName": s, "Group": "GroupA", "Run": batch_metadata.loc[batch_metadata["SampleName"] == s, "Run"].values[0]})
@@ -48,7 +48,6 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
         meta_rows.append({"SampleName": s, "Group": "GroupB", "Run": batch_metadata.loc[batch_metadata["SampleName"] == s, "Run"].values[0]})
     metadata_df = pd.DataFrame(meta_rows)
 
-    # Ensure counts has required samples
     gene_col = "Geneid"
 
     available_samples = [c for c in counts_df.columns if c != gene_col]
@@ -57,14 +56,13 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
     if missing:
         raise ValueError(f"Samples not found in counts: {missing}")
 
-    # Subset counts to requested samples only (in metadata order)
     count_cols = [gene_col] + list(metadata_df["SampleName"])
     counts_subset = counts_df[[c for c in count_cols if c in counts_df.columns]].copy()
     counts_subset = counts_subset.rename(columns={gene_col: "gene"})
 
-    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    r_script = os.path.join(script_dir, "deg_analysis.R")
-    if not os.path.isfile(r_script):
+    script_dir = Path(__file__).resolve().parent
+    r_script = script_dir / "deg_analysis.R"
+    if not r_script.is_file():
         raise FileNotFoundError(f"DEG R script not found: {r_script}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -75,12 +73,11 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
         counts_subset.to_csv(count_path, index=False)
         metadata_df.to_csv(meta_path, index=False)
 
-        r_args = [r_script, count_path, meta_path, out_path, "human"]
+        r_args = [str(r_script), count_path, meta_path, out_path, "human"]
 
-        # R stdout/stderr stream to EC2 console
         result = subprocess.run(
             r_args,
-            cwd=script_dir,
+            cwd=str(script_dir),
             timeout=300,
         )
 

@@ -4,7 +4,7 @@ from typing import Dict, Any
 import pandas as pd
 from fastapi.responses import JSONResponse
 
-from research_pipeline import ResearchPipeline
+from research.research_pipeline import ResearchPipeline
 
 
 def run_deg_with_research_pipeline(

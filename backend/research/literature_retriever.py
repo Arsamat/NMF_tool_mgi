@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 import logging
 
-from opentargets_retriever import OpenTargetsAPI
+from research.opentargets_retriever import OpenTargetsAPI
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

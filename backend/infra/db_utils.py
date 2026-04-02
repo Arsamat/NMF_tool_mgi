@@ -10,7 +10,7 @@ import zipfile
 import json
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
-from utils.s3_utils import upload_brb
+from infra.s3_utils import upload_brb
 
 # Read from environment; never commit the actual URL
 MONGO_URI = os.environ.get("MONGODB_URI") or os.environ.get("MONGO_URI")

@@ -1,6 +1,6 @@
 import pandas as pd
-from plot_heatmap_helpers import create_dendrogram, make_heatmap_png, build_annotations, dendogram_modules, module_annotated_heatmap
-from plot_heatmap_helpers import build_color_annotations, make_heatmap
+from heatmaps.plot_heatmap_helpers import create_dendrogram, make_heatmap_png, build_annotations, dendogram_modules, module_annotated_heatmap
+from heatmaps.plot_heatmap_helpers import build_color_annotations, make_heatmap
 from scipy.stats import hypergeom
 import seaborn as sns
 import matplotlib.pyplot as plt
