@@ -11,7 +11,7 @@ import zipfile
 import pandas as pd
 from fastapi.responses import StreamingResponse
 
-from utils.db_utils import get_counts_subset
+from utils.db_utils import get_counts_subset, get_run_metadata
 
 
 def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingResponse:
@@ -31,6 +31,8 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
 
     sample_names = list(group_a) + list(group_b)
     counts_df = get_counts_subset(sample_names)
+    batch_metadata = get_run_metadata(sample_names)
+
 
     if counts_df is None or (isinstance(counts_df, dict) and not counts_df):
         raise ValueError("No count data found for the specified samples")
@@ -41,9 +43,9 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
     # Build metadata: SampleName, Group (GroupA/GroupB)
     meta_rows = []
     for s in group_a:
-        meta_rows.append({"SampleName": s, "Group": "GroupA"})
+        meta_rows.append({"SampleName": s, "Group": "GroupA", "Run": batch_metadata.loc[batch_metadata["SampleName"] == s, "Run"].values[0]})
     for s in group_b:
-        meta_rows.append({"SampleName": s, "Group": "GroupB"})
+        meta_rows.append({"SampleName": s, "Group": "GroupB", "Run": batch_metadata.loc[batch_metadata["SampleName"] == s, "Run"].values[0]})
     metadata_df = pd.DataFrame(meta_rows)
 
     # Ensure counts has required samples

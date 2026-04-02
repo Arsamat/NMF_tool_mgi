@@ -29,8 +29,7 @@ from utils.extra_utils import gpt_utils
 from utils.s3_utils import create_url, create_preprocessed_url, download_data_util
 from utils.deg_utils import run_deg_analysis
 from utils.research_utils import run_deg_with_research_pipeline
-from utils.hypothesis_utils import validate_hypotheses_claude_service
-from utils.results_map_utils import (
+from utils.precomputed_deg_utils import (
     get_experiments,
     get_groups_for_experiment,
     get_terms_for_group,
@@ -681,34 +680,6 @@ def complete_multipart_upload(req: CompleteMultipartRequest):
     return {"location": resp.get("Location"), "etag": resp.get("ETag")}
 
 
-# ===== Hypothesis Validation Endpoints =====
-
-class HypothesisValidationRequest(BaseModel):
-    """Request model for hypothesis validation."""
-    hypotheses: list  # List of hypothesis strings
-    max_papers: int = 10  # Max papers to search per hypothesis
-
-
-@app.post("/validate_hypotheses_claude/")
-def validate_hypotheses_claude(req: HypothesisValidationRequest):
-    """
-    Validate multiple hypotheses against PubMed literature using Claude-based agent.
-
-    Returns novelty assessments and reasoning for each hypothesis.
-    """
-    try:
-        return validate_hypotheses_claude_service(
-            hypotheses=req.hypotheses,
-            max_papers=req.max_papers,
-        )
-    except Exception as e:
-        print(f"Claude hypothesis validation error: {e}")
-        return {
-            "error": str(e),
-            "results": [],
-        }
-
-
 # ===== Precomputed DEG Results Endpoints =====
 
 class DEGResultsGroupsRequest(BaseModel):
@@ -718,6 +689,7 @@ class DEGResultsGroupsRequest(BaseModel):
 class DEGResultsTermsRequest(BaseModel):
     experiment: str
     group: str
+    context: str = ""
 
 
 class DEGResultsFetchRequest(BaseModel):
@@ -741,8 +713,8 @@ def list_deg_groups(req: DEGResultsGroupsRequest):
 
 @app.post("/deg_results/terms")
 def list_deg_terms(req: DEGResultsTermsRequest):
-    """Return available interaction terms (term_labels) for an experiment + group."""
-    return {"terms": get_terms_for_group(req.experiment, req.group)}
+    """Return available terms for an experiment + group (+ optional context)."""
+    return {"terms": get_terms_for_group(req.experiment, req.group, req.context)}
 
 
 @app.post("/deg_results/fetch_csv")

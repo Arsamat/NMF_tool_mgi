@@ -56,13 +56,10 @@ def create_preprocessed_url():
     }    
 
 def download_data_util(job_id, data_type):
-    filename = ""
     if data_type == "counts":
         s3_key = f"jobs/{job_id}/counts.csv"
-        filename = "counts.csv"
     elif data_type == "preprocessed":
        s3_key = f"jobs/{job_id}/preprocessed_counts.csv" 
-       filename = "preprocessed_counts.csv"
 
     try:
         s3.head_object(Bucket=BUCKET, Key=s3_key)
@@ -74,13 +71,13 @@ def download_data_util(job_id, data_type):
         Params={
             "Bucket": BUCKET,
             "Key": s3_key,
-            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+            "ResponseContentDisposition": 'attachment; filename="preprocessed.csv"',
             "ResponseContentType": "application/octet-stream",
         },
         ExpiresIn=300,
     )
 
-    return {"download_url": url}
+    return RedirectResponse(url=url, status_code=302)
 
     # try:
     #     try:

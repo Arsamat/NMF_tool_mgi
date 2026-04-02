@@ -2,7 +2,6 @@
 Browse precomputed DEG results stored in MongoDB / S3.
 
 Navigation flow (driven by st.session_state["deg_precomputed_view"]):
-  "experiments"  → table of all experiments from the results map
   "groups"       → groups for the selected experiment
   "results"      → interaction-term selector + DEG table/plots
 """

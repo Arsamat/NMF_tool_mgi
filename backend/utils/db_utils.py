@@ -207,6 +207,12 @@ def get_counts_subset(sample_names):
 
     return out
 
+def get_run_metadata(sample_names):
+    docs = list(collection.find({"SampleName": {"$in": sample_names}}))
+    df = pd.DataFrame(docs)
+    return df[["SampleName", "Run"]]
+
+
 
 async def update_database(counts_data, metadata):
     # Step 1 — Read uploaded Feather files into DataFrames

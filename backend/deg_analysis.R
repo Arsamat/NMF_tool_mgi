@@ -121,7 +121,7 @@ x <- tryCatch(
 )
 
 # Design and voom
-design <- model.matrix(~ Group, data = x$samples)
+design <- model.matrix(~ Group + Run, data = x$samples)
 v <- voom(x, design, plot = FALSE)
 
 # Fit and eBayes
