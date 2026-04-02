@@ -12,8 +12,6 @@ import requests
 import io
 
 from deg.plot_helpers import place_labels_no_overlap
-from deg.hypothesis_validator_ui import validate_and_display
-from deg.hypothesis_validator_ui import display_hypothesis_validation_results
 
 
 def _fig_to_html(fig, width=1400, height=None):
@@ -500,9 +498,3 @@ def render_deg_results_and_visualizations(
                     "text/plain",
                     key=f"{widget_prefix}hypotheses_download",
                 )
-        
-        # if st.button("Validate hypotheses against literature", key="deg_validate_hypotheses"):
-        #     validate_and_display(st.session_state.get("deg_api_url", DEG_API_URL), hyp_text, max_papers=10)
-        
-        # if "deg_hypothesis_validation_results" in st.session_state and st.session_state["deg_hypothesis_validation_results"] is not None:
-        #     display_hypothesis_validation_results(st.session_state["deg_hypothesis_validation_results"])

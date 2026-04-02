@@ -68,11 +68,11 @@ RUN echo "=== /opt/mypkg ===" && ls -la /opt/mypkg && \
     echo "=== find version.py ===" && find /opt/mypkg -maxdepth 5 -name version.py -print || true
 RUN pip install --no-cache-dir -e /opt/mypkg
 
-# Copy the rest of your backend code (fast_api.py, utils/, etc.)
+# Copy application tree (fast_api.py, api/, deg/, infra/, nmf/, heatmaps/, research/, pathway/, packages/, ...)
 COPY . .
 
 # Make R script executable
-RUN chmod +x deg_analysis.R
+RUN chmod +x deg/deg_analysis.R
 
 EXPOSE 8000
 
