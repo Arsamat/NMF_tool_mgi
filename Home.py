@@ -187,14 +187,14 @@ if st.session_state["ui_mode"] == "tool":
     # OTHER TOP-LEVEL SECTIONS
     # -------------------------------------------
     elif main_page == "DE Browse by Experiment":
-        from deg.experiment_browser import run_experiment_browser
+        from deg.browse_brb_by_experiment.experiment_browser import run_experiment_browser
 
         #st.session_state["deg_api_url"] = "http://3.141.231.76:8000/"
         st.session_state["deg_api_url"] = "http://18.218.84.81:8000/"
         run_experiment_browser()
 
     elif main_page == "DE De Novo by Samples":
-        from deg.group_selection import run_group_selection
+        from deg.browse_brb_by_metadata.group_selection import run_group_selection
 
         #st.session_state["deg_api_url"] = "http://3.141.231.76:8000/"
         st.session_state["deg_api_url"] = "http://18.218.84.81:8000/"
