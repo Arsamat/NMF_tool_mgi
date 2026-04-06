@@ -8,15 +8,17 @@ Navigation flow (driven by st.session_state["deg_precomputed_view"]):
 
 import io
 import zipfile
+
 import pandas as pd
 import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-from deg.precomputed_results_browser_helpers import (
+
+from deg.browse_brb_by_experiment.precomputed_results_browser_helpers import (
     render_precomputed_deg_term_sidebar,
+    render_precomputed_expression_heatmap,
     render_table_and_volcano,
 )
-
 from ui_theme import apply_custom_theme
 from deg.group_helpers import (
     authenticate,
@@ -69,10 +71,6 @@ def run_precomputed_results_browser():
         render_results_view(api_url)
 
 
-# ---------------------------------------------------------------------------
-# Level 2: groups for the selected experiment
-# ---------------------------------------------------------------------------
-
 def render_groups_view(api_url: str):
     experiment = st.session_state.get("deg_precomputed_experiment", "")
 
@@ -98,7 +96,6 @@ def render_groups_view(api_url: str):
         st.warning("No groups found for this experiment.")
         return
 
-    # Build a display dataframe with one row per returned (group, context)
     display_rows = []
     row_sources = []
     for g in groups:
@@ -107,17 +104,18 @@ def render_groups_view(api_url: str):
         context = g.get("context", "")
         if isinstance(context, list):
             context = ", ".join([str(c) for c in context if c])
-        display_rows.append({
-            "Group": g.get("group", ""),
-            "Context": context,
-            "Model Design": g.get("model_design", ""),
-            "N Samples": g.get("n_samples", ""),
-            "Sample Names": sample_preview,
-        })
+        display_rows.append(
+            {
+                "Group": g.get("group", ""),
+                "Context": context,
+                "Model Design": g.get("model_design", ""),
+                "N Samples": g.get("n_samples", ""),
+                "Sample Names": sample_preview,
+            }
+        )
         row_sources.append(g)
 
     display_df = pd.DataFrame(display_rows)
-
     selection = st.dataframe(
         display_df,
         use_container_width=True,
@@ -147,16 +145,11 @@ def render_groups_view(api_url: str):
     except Exception:
         pass
 
-    # Full sample names in an expander
     with st.expander("View full sample names for all groups"):
         for g in groups:
             st.markdown(f"**{g.get('group', '')}** ({g.get('context', '')})")
             st.caption(g.get("sample_names", ""))
 
-
-# ---------------------------------------------------------------------------
-# Level 3: interaction-term selector + DEG results
-# ---------------------------------------------------------------------------
 
 def render_results_view(api_url: str):
     experiment = st.session_state.get("deg_precomputed_experiment", "")
@@ -173,7 +166,6 @@ def render_results_view(api_url: str):
 
     st.title(f"{experiment} — {group}")
 
-    # Summary metrics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("N Samples", group_data.get("n_samples", "—"))
@@ -181,14 +173,13 @@ def render_results_view(api_url: str):
         st.metric("Group", group)
     with col3:
         st.metric("Context", context or "—")
-    st.metric("Model design", group_data.get('model_design', '-'))
+    st.metric("Model design", group_data.get("model_design", "-"))
 
     with st.expander("Sample names"):
         st.write(group_data.get("sample_names", "—"))
 
     st.divider()
 
-    # Load available terms (cached in session state)
     if st.session_state.get("deg_precomputed_terms") is None:
         try:
             resp = requests.post(
@@ -207,7 +198,7 @@ def render_results_view(api_url: str):
     if not terms:
         st.warning("No DEG result files found for this group (de_csv_exists may be False for all terms).")
         return
-    
+
     with st.sidebar:
         selected_term = render_precomputed_deg_term_sidebar(
             terms,
@@ -221,12 +212,8 @@ def render_results_view(api_url: str):
     if term_entry is None:
         return
 
-    # Fetch results from S3 (only when term or group changes)
     cache_key = f"{experiment}|{group}|{context}|{selected_term}"
-    if (
-        st.session_state.get("deg_precomputed_deg_df") is None
-        or st.session_state.get("deg_precomputed_loaded_key") != cache_key
-    ):
+    if st.session_state.get("deg_precomputed_deg_df") is None or st.session_state.get("deg_precomputed_loaded_key") != cache_key:
         with st.spinner("Fetching DEG results from database…"):
             try:
                 resp = requests.post(
@@ -247,14 +234,15 @@ def render_results_view(api_url: str):
                     st.error(f"Backend error ({resp.status_code}): {detail}")
                     return
 
-                # Unzip response
                 with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
                     deg_df = pd.read_csv(z.open("deg_results.csv"))
                     deg_df = deg_df.rename(columns={"gene_symbol": "SYMBOL"})
                     barplot_bytes = z.read("gsea_barplot.png") if "gsea_barplot.png" in z.namelist() else None
+                    heatmap_bytes = z.read("deg_heatmap.png") if "deg_heatmap.png" in z.namelist() else None
 
                 st.session_state["deg_precomputed_deg_df"] = deg_df
                 st.session_state["deg_precomputed_barplot"] = barplot_bytes
+                st.session_state["deg_precomputed_heatmap"] = heatmap_bytes
                 st.session_state["deg_precomputed_loaded_key"] = cache_key
             except Exception as exc:
                 st.error(f"Could not fetch DEG results: {exc}")
@@ -265,9 +253,23 @@ def render_results_view(api_url: str):
         st.warning("DEG results table is empty.")
         return
 
-    render_table_and_volcano(deg_df, widget_prefix=f"deg_pre_{selected_term}_")
+    wp = f"deg_pre_{selected_term}_"
+    render_table_and_volcano(deg_df, widget_prefix=wp)
 
     barplot_bytes = st.session_state.get("deg_precomputed_barplot")
     if barplot_bytes:
-        st.subheader("GSEA barplot")
-        st.image(barplot_bytes, use_container_width=True)
+        with st.expander("GSEA barplot", expanded=True):
+            st.subheader("GSEA barplot")
+            st.image(barplot_bytes, use_container_width=True)
+
+    render_precomputed_expression_heatmap(
+        deg_df,
+        group_data,
+        widget_prefix=wp,
+        api_url=api_url,
+        result_cache_key=cache_key,
+    )
+
+
+__all__ = ["run_precomputed_results_browser"]
+

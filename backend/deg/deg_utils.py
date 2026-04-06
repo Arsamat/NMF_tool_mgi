@@ -13,7 +13,8 @@ from pathlib import Path
 import pandas as pd
 from fastapi.responses import StreamingResponse
 
-from infra.db_utils import get_counts_subset, get_run_metadata
+from deg.deg_heatmap import render_deg_heatmap_png_bytes
+from infra.db_utils import get_counts_subset, get_metadata_for_samples, get_run_metadata
 
 
 def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingResponse:
@@ -101,7 +102,21 @@ def run_deg_analysis(group_a: list[str], group_b: list[str]) -> StreamingRespons
             zf.writestr("deg_analysis.feather", df_buf.getvalue())
             if os.path.isfile(heatmap_path):
                 with open(heatmap_path, "rb") as f:
-                    zf.writestr("heatmap_matrix.csv", f.read())
+                    hm_raw = f.read()
+                zf.writestr("heatmap_matrix.csv", hm_raw)
+                try:
+                    hm_df = pd.read_csv(io.BytesIO(hm_raw), index_col=0)
+                    mongo_meta = get_metadata_for_samples(hm_df.columns.tolist())
+                    png_bytes = render_deg_heatmap_png_bytes(
+                        hm_df,
+                        group_a,
+                        group_b,
+                        mongo_meta,
+                        annotation_cols=None,
+                    )
+                    zf.writestr("deg_heatmap.png", png_bytes)
+                except Exception as e:
+                    print(f"[DEG] Skipped deg_heatmap.png: {e}")
             if os.path.isfile(heatmap_anno_path):
                 with open(heatmap_anno_path, "rb") as f:
                     zf.writestr("heatmap_annotation.csv", f.read())
