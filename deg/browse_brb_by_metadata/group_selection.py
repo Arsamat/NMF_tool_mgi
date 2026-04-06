@@ -1,45 +1,43 @@
 """
 DEG group selection page: load metadata from backend, display as dataframe with
 checkboxes, assign samples to Group A or Group B, remove from groups, submit to backend.
-Uses same authentication and EC2 wake-up (Lambda) pattern as brb_data_pages/extract_counts_frontend.
 """
-import streamlit as st
-import requests
-import pandas as pd
+
 import io
 import zipfile
+
+import pandas as pd
+import requests
+import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+
 from ui_theme import apply_custom_theme
 from deg.group_helpers import (
     add_to_group,
-    remove_from_group,
-    clear_group,
     add_samples_to_group,
-    natural_language_group_assignment,
-    ensure_auth_session,
     authenticate,
-    ensure_ec2_wake_session,
-    start_ec2_once,
     check_health,
+    clear_group,
+    ensure_auth_session,
+    ensure_ec2_wake_session,
+    natural_language_group_assignment,
+    remove_from_group,
+    start_ec2_once,
 )
 from deg.viz_helpers import render_deg_results_and_visualizations
-from deg.group_selection_data_flow import render_filter_and_data_steps
+from deg.browse_brb_by_metadata.group_selection_data_flow import render_filter_and_data_steps
 
-
-
-# Default API URL and Lambda URL (wake EC2; same pattern as extract_counts_frontend)
-#DEG_API_URL = "http://3.141.231.76:8000/"
 DEG_API_URL = "http://18.218.84.81:8000/"
 DEG_LAMBDA_URL = "https://hc5ycktqbvxywpf4f4xhxfvm2e0dpozl.lambda-url.us-east-2.on.aws/"
 
 
 def _render_step_header(step_num: int, title: str, subtitle: str = "", optional: bool = False):
     if optional:
-        border_color = "rgba(245, 158, 11, 0.55)"  # amber
+        border_color = "rgba(245, 158, 11, 0.55)"
         bg_color = "rgba(245, 158, 11, 0.10)"
         badge_text = "OPTIONAL"
     else:
-        border_color = "rgba(34, 197, 94, 0.55)"   # green
+        border_color = "rgba(34, 197, 94, 0.55)"
         bg_color = "rgba(34, 197, 94, 0.10)"
         badge_text = "REQUIRED"
 
@@ -69,7 +67,6 @@ def _render_step_header(step_num: int, title: str, subtitle: str = "", optional:
 
 
 def _keys_for_mode(mode: str) -> dict:
-    """Return session/widget key names for a UI mode."""
     if mode == "experiment":
         state_prefix = "deg_exp_"
         widget_prefix = "deg_exp_w_"
@@ -91,6 +88,7 @@ def _keys_for_mode(mode: str) -> dict:
         "dup_warning": f"{state_prefix}dup_warning",
         "heatmap_df": f"{state_prefix}heatmap_df",
         "heatmap_annotation_df": f"{state_prefix}heatmap_annotation_df",
+        "heatmap_image": f"{state_prefix}heatmap_image",
         "gsea_df": f"{state_prefix}gsea_df",
         "results_df": f"{state_prefix}results_df",
         "counts_tmp": f"{state_prefix}counts_tmp",
@@ -102,7 +100,7 @@ def _keys_for_mode(mode: str) -> dict:
 def _ensure_session(keys: dict):
     st.session_state.setdefault("deg_api_url", DEG_API_URL)
     st.session_state.setdefault("deg_schema", None)
-    st.session_state.setdefault(keys["metadata_df"], None)  # full metadata + Select column
+    st.session_state.setdefault(keys["metadata_df"], None)
     st.session_state.setdefault(keys["group_a"], [])
     st.session_state.setdefault(keys["group_b"], [])
     st.session_state.setdefault(keys["filters"], {})
@@ -113,6 +111,7 @@ def _ensure_session(keys: dict):
     st.session_state.setdefault(keys["dup_warning"], None)
     st.session_state.setdefault(keys["heatmap_df"], None)
     st.session_state.setdefault(keys["heatmap_annotation_df"], None)
+    st.session_state.setdefault(keys["heatmap_image"], None)
     st.session_state.setdefault(keys["gsea_df"], None)
     st.session_state.setdefault(keys["results_df"], None)
     st.session_state.setdefault(keys["counts_tmp"], None)
@@ -123,13 +122,11 @@ def _ensure_session(keys: dict):
 def run_group_selection(mode: str = "novo"):
     apply_custom_theme()
 
-    # --- Authentication (same as extract_counts_frontend) ---
     ensure_auth_session()
     if not st.session_state["authenticated"]:
         authenticate()
         return
 
-    # --- EC2 wake-up via Lambda (same as extract_counts_frontend) ---
     ensure_ec2_wake_session(DEG_API_URL, DEG_LAMBDA_URL)
     if not st.session_state.get("deg_ec2_start_triggered"):
         start_ec2_once()
@@ -149,8 +146,6 @@ def run_group_selection(mode: str = "novo"):
     st.title("DEG Analysis: Group Selection")
     st.caption("Workflow: Filter samples -> Retrieve metadata -> Visualize/download -> Assign groups -> Run DEG")
 
-    # ----- Step 1: Load schema -----
-    #st.subheader("Step 1: Load metadata schema")
     if st.session_state.get("deg_fastapi_ready", "False") and st.session_state.get("deg_schema") is None:
         try:
             r = requests.get(f"{api_url}get_metadata/", timeout=30)
@@ -177,7 +172,6 @@ def run_group_selection(mode: str = "novo"):
     if meta_df is None:
         return
 
-    # ----- Step 4: Select samples and assign to groups -----
     _render_step_header(
         4,
         "Assign Samples to Comparison and Reference Groups",
@@ -185,7 +179,6 @@ def run_group_selection(mode: str = "novo"):
         optional=False,
     )
     col1, col2 = st.columns(2)
-    
     with col1:
         if st.button("Select all rows", key=wk("select_all")):
             df = st.session_state[keys["metadata_df"]].copy()
@@ -209,15 +202,12 @@ def run_group_selection(mode: str = "novo"):
         key=editor_key,
         disabled=[c for c in meta_df.columns if c != "Select"],
     )
-    # Don't sync edited back to session state - avoids checkbox double-click bug
-    # Session state is only updated on load or when we reset Select (add/clear group)
 
     if st.session_state.get(keys["dup_warning"]):
         st.warning(st.session_state[keys["dup_warning"]])
         st.session_state[keys["dup_warning"]] = None
 
     GROUP_WINDOW_HEIGHT = 220
-
     col1, col2 = st.columns(2)
     with col1:
         st.button(
@@ -275,14 +265,12 @@ def run_group_selection(mode: str = "novo"):
     st.caption(f"Comparison Group: {len(ga)} samples · Reference Group: {len(gb)} samples")
 
     with st.expander("Natural Language Group Assignment", expanded=True):
-        # ----- AI Group Assignment -----
         st.divider()
         st.markdown("#### 🤖 Add Samples via AI Query")
         st.caption(
             "Describe the samples you want and which group to put them in. "
             "Example: *Add WT samples treated with Rotenone at 24h to Comparison Group*"
         )
-
         llm_query = st.text_area(
             "Query",
             key=wk("llm_group_query"),
@@ -290,7 +278,6 @@ def run_group_selection(mode: str = "novo"):
             placeholder="e.g. Add TDP43 Vehicle controls to Reference Group",
             label_visibility="collapsed",
         )
-
         col_llm1, col_llm2 = st.columns([2, 1])
         with col_llm1:
             ask_btn = st.button("🤖 Ask AI to Add Samples", key=wk("llm_group_btn"))
@@ -360,7 +347,6 @@ def run_group_selection(mode: str = "novo"):
             _show_group_result("Comparison Group", llm_result["group_a"])
             _show_group_result("Reference Group", llm_result["group_b"])
 
-    # ----- Step 5: Submit to backend -----
     _render_step_header(
         5,
         "Run DEG Analysis",
@@ -381,20 +367,21 @@ def run_group_selection(mode: str = "novo"):
                         timeout=300,
                     )
                     resp.raise_for_status()
-                    data = resp.content
-                    buf = io.BytesIO(data)
-                    # Response is ZIP (deg_analysis.feather + optional heatmap + GSEA) or legacy single feather
+                    buf = io.BytesIO(resp.content)
                     st.session_state[keys["heatmap_df"]] = None
                     st.session_state[keys["heatmap_annotation_df"]] = None
                     st.session_state[keys["gsea_df"]] = None
+                    st.session_state.pop(f"{keys['widget_prefix']}heatmap_render_sig", None)
+                    st.session_state.pop(f"{keys['widget_prefix']}heatmap_render_png", None)
                     try:
                         with zipfile.ZipFile(buf, "r") as zf:
                             st.session_state[keys["results_df"]] = pd.read_feather(io.BytesIO(zf.read("deg_analysis.feather")))
                             if "heatmap_matrix.csv" in zf.namelist():
-                                hm = pd.read_csv(io.BytesIO(zf.read("heatmap_matrix.csv")), index_col=0)
-                                st.session_state[keys["heatmap_df"]] = hm
+                                st.session_state[keys["heatmap_df"]] = pd.read_csv(io.BytesIO(zf.read("heatmap_matrix.csv")), index_col=0)
                             if "heatmap_annotation.csv" in zf.namelist():
                                 st.session_state[keys["heatmap_annotation_df"]] = pd.read_csv(io.BytesIO(zf.read("heatmap_annotation.csv")))
+                            if "deg_heatmap.png" in zf.namelist():
+                                st.session_state[keys["heatmap_image"]] = io.BytesIO(zf.read("deg_heatmap.png"))
                             if "gsea_results.csv" in zf.namelist():
                                 st.session_state[keys["gsea_df"]] = pd.read_csv(io.BytesIO(zf.read("gsea_results.csv")))
                     except zipfile.BadZipFile:
@@ -410,10 +397,15 @@ def run_group_selection(mode: str = "novo"):
                 except Exception as e:
                     st.error(f"Submit failed: {e}")
 
-    # Show DEG results and visualizations from last successful run
     if st.session_state.get(keys["results_df"]) is not None:
         render_deg_results_and_visualizations(
             st.session_state[keys["results_df"]],
             state_prefix=keys["state_prefix"],
             widget_prefix=keys["widget_prefix"],
+            group_a=st.session_state.get(keys["group_a"], []),
+            group_b=st.session_state.get(keys["group_b"], []),
         )
+
+
+__all__ = ["run_group_selection"]
+

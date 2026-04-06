@@ -213,6 +213,24 @@ def get_run_metadata(sample_names):
     return df[["SampleName", "Run"]]
 
 
+def get_metadata_for_samples(sample_names: list) -> pd.DataFrame:
+    """
+    Full metadata documents from MongoDB for the given SampleName values.
+    Used for heatmaps and other views where the client metadata may be stale.
+    """
+    if not sample_names:
+        return pd.DataFrame()
+    docs = list(collection.find({"SampleName": {"$in": list(sample_names)}}))
+    if not docs:
+        return pd.DataFrame()
+    df = pd.DataFrame(docs)
+    if "_id" in df.columns:
+        df = df.drop(columns=["_id"])
+    if "SampleName" not in df.columns:
+        return pd.DataFrame()
+    return df.drop_duplicates(subset=["SampleName"], keep="first")
+
+
 
 async def update_database(counts_data, metadata):
     # Step 1 — Read uploaded Feather files into DataFrames
