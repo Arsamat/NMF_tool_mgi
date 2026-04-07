@@ -121,7 +121,56 @@ x <- tryCatch(
 )
 
 # Design and voom
-design <- model.matrix(~ Group + Run, data = x$samples)
+x$samples$Group <- factor(x$samples$Group, levels = c("GroupB", "GroupA"))
+
+use_run <- FALSE
+
+#Check if Run column should be included in the model design
+if ("Run" %in% colnames(x$samples)) {
+  x$samples$Run <- factor(x$samples$Run)
+  x$samples$Run <- droplevels(x$samples$Run)
+
+  run_levels <- nlevels(x$samples$Run)
+  cat("[DEG] Run levels after subsetting:", levels(x$samples$Run), "\n")
+  print(table(x$samples$Run, useNA = "ifany"))
+
+  if (run_levels < 2) {
+    cat("[DEG] Run has fewer than 2 levels; using design ~ Group\n")
+  } else {
+    # Check whether Group and Run are perfectly confounded
+    grp_run_tab <- table(x$samples$Group, x$samples$Run)
+    cat("[DEG] Group x Run table:\n")
+    print(grp_run_tab)
+
+    # Perfect confounding means each group occurs in only one run
+    # or equivalently the rank of the contingency structure is too limited
+    rows_with_samples <- rowSums(grp_run_tab) > 0
+    cols_with_samples <- colSums(grp_run_tab) > 0
+    grp_run_tab <- grp_run_tab[rows_with_samples, cols_with_samples, drop = FALSE]
+
+    # simpler practical rule:
+    # if every group maps to exactly one run AND every run maps to exactly one group,
+    # treat as perfectly confounded
+    one_run_per_group <- all(rowSums(grp_run_tab > 0) == 1)
+    one_group_per_run <- all(colSums(grp_run_tab > 0) == 1)
+
+    if (one_run_per_group && one_group_per_run) {
+      cat("[DEG] Run is perfectly confounded with Group; using design ~ Group\n")
+    } else {
+      use_run <- TRUE
+      cat("[DEG] Using design ~ Group + Run\n")
+    }
+  }
+} else {
+  cat("[DEG] No Run column found; using design ~ Group\n")
+}
+
+if (use_run) {
+  design <- model.matrix(~ Group + Run, data = x$samples)
+} else {
+  design <- model.matrix(~ Group, data = x$samples)
+}
+
 v <- voom(x, design, plot = FALSE)
 
 # Fit and eBayes
