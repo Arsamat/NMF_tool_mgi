@@ -65,16 +65,16 @@ if st.session_state["ui_mode"] == "home":
                 st.rerun()
     _tool_card(
         c1,
-        "DE Analysis: Browse by experiment",
-        "Download data, run your own DE comparison, view and access pre-computed DE results (coming soon)",
-        "Start Browse by Experiment",
+        "Browse by Experiment",
+        "Download metadata and counts, run your own DE comparison based on experiment, view and access pre-computed DE results",
+        "Go to Browse by Experiment",
         "DE Browse by Experiment",
     )
     _tool_card(
         c2,
-        "DE Analysis: De novo by samples",
+        "Browse by Metadata",
         "Filter samples from any experiment and download data. Optionally run your own DE comparison or NMF analysis on selected samples.",
-        "Start De Novo by Samples",
+        "Go to Browse by Metadata",
         "DE De Novo by Samples",
     )
     _tool_card(
@@ -189,14 +189,12 @@ if st.session_state["ui_mode"] == "tool":
     elif main_page == "DE Browse by Experiment":
         from deg.browse_brb_by_experiment.experiment_browser import run_experiment_browser
 
-        #st.session_state["deg_api_url"] = "http://3.141.231.76:8000/"
-        st.session_state["deg_api_url"] = "http://18.218.84.81:8000/"
+        st.session_state["deg_api_url"] = "http://18.218.84.81:8000/"           
         run_experiment_browser()
 
     elif main_page == "DE De Novo by Samples":
         from deg.browse_brb_by_metadata.group_selection import run_group_selection
 
-        #st.session_state["deg_api_url"] = "http://3.141.231.76:8000/"
         st.session_state["deg_api_url"] = "http://18.218.84.81:8000/"
         run_group_selection()
 

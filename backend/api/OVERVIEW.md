@@ -45,10 +45,12 @@ Used by the frontend to poll whether the EC2 server is ready.
 ### `deg.py`
 | Endpoint | Method | Key Parameters | Returns |
 |----------|--------|---------------|---------|
-| `/deg_submit_groups/` | POST | `group_a: list[str]`, `group_b: list[str]` | ZIP file (DEG results) |
+| `/deg_submit_groups/` | POST | `group_a: list[str]`, `group_b: list[str]` | ZIP file (DEG results + optional `deg_heatmap.png`) |
+| `/deg_heatmap_render/` | POST | `heatmap_csv` (file upload), `group_a_json`, `group_b_json`, `annotation_cols_json` | PNG image |
 | `/deg_with_research/` | POST | `deg_table` (CSV upload), `disease_context`, `tissue`, `num_genes`, `comparison_description` | JSON (AI insights) |
 
 - `/deg_submit_groups/` → calls `deg.deg_utils.run_deg_analysis()`
+- `/deg_heatmap_render/` → calls `deg.deg_heatmap.render_deg_heatmap_png_bytes()` (merges GroupA/GroupB with MongoDB metadata to produce an annotated heatmap PNG)
 - `/deg_with_research/` → calls `research.research_utils.run_deg_with_research_pipeline()`
 
 ---
@@ -60,8 +62,10 @@ Used by the frontend to poll whether the EC2 server is ready.
 | `/deg_results/groups` | POST | `experiment: str` | `{"groups": [...]}` |
 | `/deg_results/terms` | POST | `experiment`, `group`, `context` | `{"terms": [...]}` |
 | `/deg_results/fetch_csv` | POST | `experiment`, `output_dir`, `de_csv_path`, `gsea_barplot_path` | ZIP (CSV + PNG) |
+| `/deg_results/precomputed_heatmap` | POST | `deg_csv` (file upload), `samples_json`, `annotation_cols_json` | PNG image |
 
-All call functions in `deg.precomputed_deg_utils`. Results come from MongoDB + S3.
+- First four endpoints call functions in `deg.precomputed_deg_utils`. Results come from MongoDB + S3.
+- `/deg_results/precomputed_heatmap` → calls `deg.precomputed_heatmap.build_precomputed_deg_heatmap_png_bytes_from_csv_bytes()`: fetches raw counts from S3, computes log₂-CPM, clusters top-30 genes by p-value, merges MongoDB metadata for annotation bars, returns PNG.
 
 ---
 
