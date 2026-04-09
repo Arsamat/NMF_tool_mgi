@@ -58,7 +58,7 @@ async def gpt_utils(file, top_n):
     results = {}
     for module, tmp in hmap.items():
         tmp = tmp.copy()
-        tmp["Description"] = tmp["Gene"].map(output)
+        tmp["Description"] = tmp["Gene"].map(output).fillna("No description available")
         results[module] = tmp.to_dict(orient="records")
 
     return JSONResponse(content=jsonable_encoder(results))
