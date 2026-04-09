@@ -21,6 +21,7 @@ from scipy.stats import pearsonr
 import time
 import csv
 from pybiomart import Dataset
+import mygene
 import subprocess
 import torch
 from sklearn.utils.extmath import randomized_svd
@@ -33,26 +34,40 @@ _NMF_DIR = Path(__file__).resolve().parent
 
 
 #function to transform ensembl ids to symbol ids
-def transform_ids(df_link, gene_column, symbols):
-    #dataset = Dataset(name='hsapiens_gene_ensembl',
-    #                 host='http://www.ensembl.org')
-    genes = pd.read_csv(_NMF_DIR / "gene_maps.csv")
+def transform_ids(df_link, gene_column, symbols, mouse=False):
     delimiter = detect_delimiter(df_link)
-
-
     df = pd.read_csv(df_link, delimiter=delimiter)
     df = df.set_index(gene_column)
-    
-    if not symbols:
 
-        # Get Ensembl → symbol mapping
-        #genes = dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
-        mapping = dict(zip(genes['Gene stable ID'], genes['Gene name']))
+    if not symbols:
+        if mouse:
+            # Use mygene API for mouse Ensembl IDs (ENSMUSG...)
+            mg = mygene.MyGeneInfo()
+            ensembl_ids = list(df.index.astype(str))
+            res = mg.querymany(
+                ensembl_ids,
+                scopes="ensembl.gene",
+                fields="symbol",
+                species="mouse",
+                as_dataframe=True,
+                returnall=False,
+                verbose=False,
+            )
+            if isinstance(res, pd.DataFrame) and "symbol" in res.columns:
+                sym = res["symbol"].dropna()
+                sym = sym[~sym.index.duplicated(keep="first")]
+                raw_mapping = sym.to_dict()
+            else:
+                raw_mapping = {}
+        else:
+            # Use local human gene map CSV (ENSG...)
+            genes = pd.read_csv(_NMF_DIR / "gene_maps.csv")
+            raw_mapping = dict(zip(genes['Gene stable ID'], genes['Gene name']))
 
         seen = set()
         result = []
         for val in df.index:
-            mapped = mapping.get(val, val)
+            mapped = raw_mapping.get(val, val)
             if not mapped or str(mapped).lower() == "nan":
                 mapped = val
             if mapped in seen:  # avoid duplicates
@@ -90,11 +105,12 @@ def preprocess2(counts_link='250729_renamed_counts.txt',
                           hvg=5000,
                           gene_column='X',
                           symbols=False,
+                          mouse=False,
                           batch=False,
                           batch_column="",
                           batch_include=[]):
-    
-    counts, new_path = transform_ids(counts_link, gene_column, symbols)
+
+    counts, new_path = transform_ids(counts_link, gene_column, symbols, mouse)
     
     tmp_dir = tempfile.mkdtemp(prefix="preprocess_")
     out_dir = os.path.join(tmp_dir, "filtered_batched_counts.tsv")

@@ -107,13 +107,14 @@ def run_preprocess_data():
         files = {
                 "metadata": ("metadata.tsv", meta_bytes, "text/plain"),
             }
-        if "batch" in st.session_state and st.session_state["batch"]: 
+        if "batch" in st.session_state and st.session_state["batch"]:
             data = {
             "gene_column": st.session_state["gene_column"],
             "metadata_index": st.session_state["metadata_index"],
             "design_factor": st.session_state["design_factor"],
             "hvg": st.session_state["hvg"],
             "symbols": st.session_state["gene_symbols"],
+            "mouse": st.session_state.get("mouse_data", False),
             "batch": st.session_state["batch"],
             "batch_include": ",".join(st.session_state["batch_covars"]),
             "batch_column": st.session_state["batch_column"],
@@ -127,6 +128,7 @@ def run_preprocess_data():
             "design_factor": st.session_state["design_factor"],
             "hvg": st.session_state["hvg"],
             "symbols": st.session_state["gene_symbols"],
+            "mouse": st.session_state.get("mouse_data", False),
             "batch": False,
             "batch_column": "",
             "batch_include": "",
@@ -176,6 +178,7 @@ def run_preprocess_data():
                     )   
                 
             st.session_state["gene_symbols"] = st.checkbox("Check the box if your transcript names are gene symbols (instead of Ensembl IDs).", value=False)
+            st.session_state["mouse_data"] = st.checkbox("Check the box if your data is mouse data (default assumes human).", value=False)
             if st.button("Submit", key="btn_preproc") and st.session_state["meta"] is not None:
                 submit_preprocess()
                 st.rerun()
